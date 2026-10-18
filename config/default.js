@@ -4,6 +4,14 @@ const _list = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Bool
 
 module.exports = {
   port: 3000,
+  performance: {
+    // Reusing the client's HTTP connection avoids a TCP/TLS handshake for every
+    // lobby request. Set HTTP_FORCE_CONNECTION_CLOSE=true only for clients that
+    // reproduce the old stale-socket issue after a server restart.
+    forceConnectionClose: _bool(process.env.HTTP_FORCE_CONNECTION_CLOSE, false),
+    // Emit one compact timing line only for requests slower than this threshold.
+    slowRequestMs: Number(process.env.SLOW_REQUEST_MS || 100),
+  },
   ports: {
     live: Number(process.env.LIVE_PORT || process.env.PORT || 3000),
     login: Number(process.env.LOGIN_PORT || 3001),
@@ -46,7 +54,7 @@ module.exports = {
     gameServerPort: process.env.GAME_SERVER_PORT || '10100',
     chatPort: process.env.CHAT_PORT || '10200',
     notificationPort: process.env.NOTI_PORT || '10300',
-    defaultRegion: process.env.DEFAULT_REGION || 'US'
+    defaultRegion: process.env.DEFAULT_REGION || 'IND'
   },
   db: {
     // SQLite file for the accounts store (created on first run).

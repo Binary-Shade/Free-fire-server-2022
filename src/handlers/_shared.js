@@ -26,7 +26,7 @@ const config = require('../../config/default');
 
 // --- constants -------------------------------------------------------------
 
-const DEFAULT_REGION = 'BR';
+const DEFAULT_REGION = (config.protocol && config.protocol.defaultRegion) || 'IND';
 const TOKEN_TTL = Number((config.auth && config.auth.gameTokenTtlSec) || 28800);
 
 // --- time / id helpers -----------------------------------------------------

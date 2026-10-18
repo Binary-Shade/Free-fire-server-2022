@@ -11,7 +11,7 @@
 // module so the Postgres path no longer depends on better-sqlite3.
 const { Pool } = require('pg');
 
-const { DEFAULT_PLAYER, deriveOpenId } = require('../player');
+const { DEFAULT_PLAYER, DEFAULT_REGION, deriveOpenId } = require('../player');
 const logger = require('../../logger');
 
 // Turn an accounts row into the rich player document. `state` (JSONB) is already
@@ -140,7 +140,7 @@ class PostgresRepo {
         openId,
         req.open_id_type != null ? String(req.open_id_type) : null,
         req.nickname ? String(req.nickname) : 'Player',
-        req.region ? String(req.region) : null,
+        req.region ? String(req.region) : DEFAULT_REGION,
         req.language ? String(req.language) : null,
         req.device_id ? String(req.device_id) : null,
         req.client_version ? String(req.client_version) : null,
@@ -154,7 +154,7 @@ class PostgresRepo {
     acc.open_id = openId;
     acc.open_id_type = req.open_id_type != null ? String(req.open_id_type) : null;
     if (req.nickname) acc.nickname = String(req.nickname);
-    acc.region = req.region ? String(req.region) : null;
+    acc.region = req.region ? String(req.region) : DEFAULT_REGION;
     acc.language = req.language ? String(req.language) : null;
     acc.device_id = req.device_id ? String(req.device_id) : null;
     acc.client_version = req.client_version ? String(req.client_version) : null;

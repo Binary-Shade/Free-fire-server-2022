@@ -6,6 +6,7 @@ const logger = require('../logger');
 const { lookup } = require('./protos');
 const { encrypt, decrypt, BODY_ENCODING } = require('./aes');
 const replayGuard = require('./replayGuard');
+const config = require('../../config/default');
 const { getRepo } = require('../db/repo');
 const { getBus } = require('../bus/instance');
 const { TOKEN_TTL, nowSecs } = require('../handlers/_shared');
@@ -139,10 +140,22 @@ function cipherToBody(cipher) {
 }
 
 // AES-encode `resObj` against `resTypeName` and write the transport response.
+const encodedResponseCache = new WeakMap();
+
 function sendEncoded(res, resTypeName, resObj) {
-  const ResType = lookup(resTypeName) || lookup('Empty');
-  const message = ResType.fromObject(resObj || {});
-  const encoded = ResType.encode(message).finish();
+  const source = resObj || {};
+  let encoded = source && typeof source === 'object'
+    ? encodedResponseCache.get(source)
+    : null;
+  if (!encoded) {
+    const ResType = lookup(resTypeName) || lookup('Empty');
+    const message = ResType.fromObject(source);
+    encoded = ResType.encode(message).finish();
+    // Handler-level caches can deliberately return the same immutable response
+    // object. Cache its encoded protobuf as well so large snapshots such as the
+    // vault do not spend ~100 ms re-encoding identical data on every open.
+    if (source && typeof source === 'object') encodedResponseCache.set(source, encoded);
+  }
   res.status(200).type('application/octet-stream').send(encoded);
 }
 
@@ -174,14 +187,22 @@ function createProtocolRouter({ filter } = {}) {
     // (plaintext endpoints like LogEvent may have no protobuf entry/handler).
     if (!entry && !handler && !PLAINTEXT_ENDPOINTS.has(cmd)) return next();
 
-    // Force a fresh connection per request. The game's HTTP client reuses
-    // keep-alive connections; combined with Node's 5s keepAliveTimeout (and a
-    // pooled connection going stale after a server restart) the reuse races with
-    // the server closing the socket, which the client surfaces as an
-    // intermittent "IO: Stream closed" / network error. Responding with
-    // `Connection: close` makes every request its own connection -> no reuse,
-    // no race. Covers every response path below (404, auth-empty, encoded, error).
-    res.setHeader('Connection', 'close');
+    // Keep lobby connections alive by default. This is significant in production:
+    // forcing close makes every request pay another TCP/TLS setup, often through
+    // Cloudflare. The compatibility switch remains for old clients that reproduce
+    // a stale-socket failure after a server restart.
+    if (config.performance && config.performance.forceConnectionClose) {
+      res.setHeader('Connection', 'close');
+    }
+
+    const requestStarted = process.hrtime.bigint();
+    res.once('finish', () => {
+      const elapsedMs = Number(process.hrtime.bigint() - requestStarted) / 1e6;
+      const threshold = (config.performance && config.performance.slowRequestMs) || 100;
+      if (elapsedMs >= threshold) {
+        logger.warn(`[perf] endpoint=${cmd} status=${res.statusCode} duration_ms=${elapsedMs.toFixed(1)} bytes=${res.getHeader('content-length') || 0}`);
+      }
+    });
 
     // Plaintext endpoints (e.g. LogEvent): the client sends plain JSON, NOT
     // AES(protobuf). Do NOT decrypt/decode — log it and ack with an empty 200.

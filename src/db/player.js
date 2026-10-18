@@ -36,10 +36,11 @@ const crypto = require('crypto');
 
 const accounts = require('./accounts');
 const logger = require('../logger');
+const config = require('../../config/default');
 
 const db = accounts.db;
 
-const DEFAULT_REGION = ''; // empty => client prompts for region selection
+const DEFAULT_REGION = (config.protocol && config.protocol.defaultRegion) || 'IND';
 
 // ---------------------------------------------------------------------------
 // DEFAULT_PLAYER template
@@ -64,7 +65,7 @@ function DEFAULT_PLAYER() {
 
     banned: false,
     account_type: 0,
-    region: null,
+    region: DEFAULT_REGION,
     language: null,
 
     level: 100,
@@ -693,7 +694,7 @@ function createFromLogin(loginReqObj) {
     open_id: openId,
     open_id_type: req.open_id_type != null ? String(req.open_id_type) : null,
     nickname: req.nickname ? String(req.nickname) : 'Player',
-    region: req.region ? String(req.region) : null,
+    region: req.region ? String(req.region) : DEFAULT_REGION,
     language: req.language ? String(req.language) : null,
     device_id: req.device_id ? String(req.device_id) : null,
     client_version: req.client_version ? String(req.client_version) : null,
@@ -713,7 +714,7 @@ function createFromLogin(loginReqObj) {
   acc.open_id = openId;
   acc.open_id_type = req.open_id_type != null ? String(req.open_id_type) : null;
   if (req.nickname) acc.nickname = String(req.nickname);
-  acc.region = req.region ? String(req.region) : null;
+  acc.region = req.region ? String(req.region) : DEFAULT_REGION;
   acc.language = req.language ? String(req.language) : null;
   acc.device_id = req.device_id ? String(req.device_id) : null;
   acc.client_version = req.client_version ? String(req.client_version) : null;

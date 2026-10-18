@@ -500,7 +500,7 @@ module.exports = {
     "weapon_skin_system_time": 1603508400,
     "rate_app_switch_res": {
       "switch_desc": {
-        "region": "BR",
+        "region": "IND",
         "ios_open": true,
         "gp_open": true,
         "game_mode1": 1,

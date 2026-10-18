@@ -2,10 +2,8 @@ const http = require('http');
 const logger = require('../logger');
 
 // Start an HTTP server for `app` on `port`. Keep-alive timeouts are raised well
-// above Node's 5s default (headersTimeout must be >= keepAliveTimeout) so any
-// residual keep-alive traffic can't hit the close-vs-reuse race that surfaces as
-// intermittent "stream closed" on the game client. (Game responses already send
-// Connection: close; see src/protocol/router.js.)
+// above Node's 5s default (headersTimeout must be >= keepAliveTimeout) so the
+// client can reuse lobby connections without racing an idle server-side close.
 function startServer(app, port, name) {
   const server = http.createServer(app);
   server.keepAliveTimeout = 65000;

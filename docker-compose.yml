@@ -22,6 +22,8 @@ x-node: &node
     MAIN_DOMAIN: ${MAIN_DOMAIN:-}
     TCP_PUBLIC_HOST: ${TCP_PUBLIC_HOST:-}
     MATCH_PUBLIC_HOST: ${MATCH_PUBLIC_HOST:-}
+    DEFAULT_REGION: ${DEFAULT_REGION:-IND}
+    LOBBY_REGION: ${LOBBY_REGION:-IND}
     # Match server port the login/matchmaker ADVERTISE to the client
     # (config.protocol.gameServerPort in GetLoginData + the matchmaker's server_addr);
     # MUST equal the match service's GAME_SERVER_PORT or the client dials a dead port.
@@ -47,6 +49,8 @@ x-node: &node
     REPLAY_WINDOW_MS: ${REPLAY_WINDOW_MS:-30000}
     REPLAY_MAX_ENTRIES: ${REPLAY_MAX_ENTRIES:-100000}
     REPLAY_EXCLUDE: ${REPLAY_EXCLUDE:-LogEvent,NetworkLogEvent}
+    HTTP_FORCE_CONNECTION_CLOSE: ${HTTP_FORCE_CONNECTION_CLOSE:-false}
+    SLOW_REQUEST_MS: ${SLOW_REQUEST_MS:-100}
   depends_on: [redis]
 
 # Shared config for the two Facebook/Garena-compatible auth services. Each

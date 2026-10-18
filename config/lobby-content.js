@@ -5,7 +5,7 @@ const path = require('path');
 
 const contentFile = path.join(__dirname, '..', 'data', 'lobby-content.json');
 const defaults = {
-  region: process.env.LOBBY_REGION || 'BR',
+  region: process.env.LOBBY_REGION || 'IND',
   language: process.env.LOBBY_LANGUAGE || 'en',
   marquee: String(process.env.LOBBY_MARQUEE || 'Welcome to the local server!|Clash Squad bot matches are available now.')
     .split('|').map((text) => text.trim()).filter(Boolean),
