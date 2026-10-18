@@ -1,0 +1,54 @@
+# Testing the local server on a physical Android device
+
+The prepared APK trusts the local mitmproxy certificate and is aligned and signed with APK Signature Schemes v1, v2, and v3 for current Android releases. It uses the phone's Wi-Fi proxy to route the private-server HTTPS domains to the PC while leaving CDN traffic online. The TCP gateway and UDP match server are advertised directly on the PC's LAN address.
+
+## Prepared mobile files
+
+- APK: `D:\Games\oldff2022-android-lan\oldff2022-lan-signed.apk`
+- OBB: `D:\Games\oldff2022-android-lan\main.2019114971.com.dts.freefireth.obb`
+- Package: `com.dts.freefireth`
+
+The APK uses the same local test signature as the emulator build. Android cannot update an installation signed by a different key, so uninstall a conflicting `com.dts.freefireth` installation first. Copy the OBB after installing the APK.
+
+## Start the PC stack
+
+Open PowerShell in `D:\Games\FreeFireServer-master` and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-lan-test.ps1 -LanAddress 192.168.1.2
+```
+
+The launcher starts the live, auth, login, main, TCP, matchmaking, Redis-compatible, UDP match, and proxy services. It advertises `192.168.1.2:10300` for lobby notifications and `192.168.1.2:10100` for matches. Logs and process IDs are stored under `data\lan-test`.
+
+## Install over USB with ADB
+
+Enable Developer options and USB debugging, connect the phone, accept its authorization prompt, then run:
+
+```powershell
+adb devices
+adb install "D:\Games\oldff2022-android-lan\oldff2022-lan-signed.apk"
+adb shell mkdir -p /sdcard/Android/obb/com.dts.freefireth
+adb push "D:\Games\oldff2022-android-lan\main.2019114971.com.dts.freefireth.obb" /sdcard/Android/obb/com.dts.freefireth/
+```
+
+On newer Android releases, direct ADB access to `/sdcard/Android/obb` can be restricted. In that case, copy the OBB with the phone's file manager after granting it storage access, or install through an XAPK installer that can place OBB files.
+
+## Configure the phone
+
+Connect the phone and PC to the same local network. In the active Wi-Fi network's advanced settings, set:
+
+- Proxy: Manual
+- Proxy hostname: `192.168.1.2`
+- Proxy port: `8080`
+
+Keep the proxy enabled while using this build. Open the APK, use the Facebook-style local login page, and create a disposable local login if the ephemeral auth service was restarted.
+
+The router must allow devices on the network to communicate with each other. Guest Wi-Fi and AP/client isolation will prevent the phone from reaching the PC. Windows Firewall must permit inbound TCP ports `3000,3001,3002,5000,8080,10300,25565` and inbound UDP port `10100` on the Private profile.
+
+## Stop the stack
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-lan-test.ps1
+```
+
+Remove the manual Wi-Fi proxy from the phone afterward so normal web access does not depend on the PC.

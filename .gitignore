@@ -1,0 +1,26 @@
+node_modules/
+.env
+logs/
+npm-debug.log*
+dist/
+original_to_read/
+test_logs/
+tools/
+.refactor_backup/
+# exported client replay files (local diagnosis only)
+*_rep.bin
+*_rep.json
+# local protocol smoke artifacts
+data/*smoke*.db*
+data/concurrent-*.log
+data/concurrent-*.err
+data/apk-local-test.mitm
+data/lobby-content.json
+# Runtime state and local traffic captures
+data/*.db
+data/*.db-*
+data/*.mitm
+data/*.log
+data/*.err.log
+data/lan-test/
+scratch_body.txt
