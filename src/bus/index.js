@@ -199,6 +199,15 @@ class Bus {
   hgetall(key) { return this.pub.hgetall(key); }
   hlen(key) { return this.pub.hlen(key); }
   incr(key) { return this.pub.incr(key); }
+  del(key) { return this.pub.del(key); }
+  sadd(key, ...members) { return this.pub.sadd(key, ...members); }
+  srem(key, ...members) { return this.pub.srem(key, ...members); }
+  smembers(key) { return this.pub.smembers(key); }
+  lpush(key, ...values) { return this.pub.lpush(key, ...values); }
+  rpush(key, ...values) { return this.pub.rpush(key, ...values); }
+  lrange(key, start, stop) { return this.pub.lrange(key, start, stop); }
+  ltrim(key, start, stop) { return this.pub.ltrim(key, start, stop); }
+  expire(key, seconds) { return this.pub.expire(key, seconds); }
 
   // --- distributed lock (leader election) -----------------------------------
   // A single-holder lease: SET key=token NX PX ttl succeeds for exactly one caller;

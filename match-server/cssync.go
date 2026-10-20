@@ -47,11 +47,23 @@ func (m *Match) priPayload() []byte {
 			ObCount: m.obCount(p.entityID), // spectators watching this player -> OB_COUNT badge (field 14)
 		})})
 	}
-	if m.botEntity != 0 && m.entityHP(m.botEntity) > 0 {
-		botScore := message.PackScore(m.teamScore[1], m.teamScore[0]) // the bot is team 2
-		ents = append(ents, message.PRIEntity{RepID: botRepID, Block: message.PRIHPBlock(message.PRIState{
-			CurHP: m.entityHP(m.botEntity), MaxHP: m.settings.maxHP, Score: botScore, Faction: botFaction,
-			Kills: capByte(m.kills[m.botEntity]), Deaths: capByte(m.deaths[m.botEntity]), Damage: m.damage[m.botEntity],
+	for _, b := range m.bots {
+		if m.entityHP(b.entityID) == 0 {
+			continue
+		}
+		botScore := message.PackScore(m.teamScore[b.team-1], m.teamScore[2-b.team]) // the bot is team 2
+		fireState := byte(0)
+		itemOnHand := uint64(0)
+		if b != nil {
+			if b.firing {
+				fireState = 2
+			}
+			itemOnHand = uint64(b.weaponUnique)<<32 | uint64(b.weaponData)
+		}
+		ents = append(ents, message.PRIEntity{RepID: b.repID, Block: message.PRIHPBlock(message.PRIState{
+			CurHP: m.entityHP(b.entityID), MaxHP: m.settings.maxHP, Score: botScore, Faction: b.team - 1,
+			Kills: capByte(m.kills[b.entityID]), Deaths: capByte(m.deaths[b.entityID]), Damage: m.damage[b.entityID],
+			ItemOnHand: itemOnHand, FireState: fireState,
 			SpeedScale: m.settings.speedScale, JumpScale: m.settings.jumpScale,
 		})})
 	}
@@ -158,7 +170,7 @@ func (s *session) giveLoadout(resetCoins bool) {
 	if !noLoadout {
 		uspAttach, uspEquips = s.buildWeaponAttachments(uspUID, uspData)
 		inv = append(inv, message.InvItem{Unique: uspUID, Data: uspData, Count: 1, Runtime: uspMag}) // USP weapon
-		inv = append(inv, s.giveAmmoStacks(pistolAmmo)...)                                            // pistol-ammo reserve as one combined stack (see giveAmmoStacks)
+		inv = append(inv, s.giveAmmoStacks(pistolAmmo)...)                                           // pistol-ammo reserve as one combined stack (see giveAmmoStacks)
 	}
 	if cfg.infiniteGloo { // testing: seed gloo walls so placing needs no shop trip
 		glooUID := s.nextUID()
@@ -294,7 +306,9 @@ func (s *session) bindPRIs() {
 		}
 	}
 	if m.botEntity != 0 { // no bot to bind once it's retired (a 2nd human joined)
-		entries = append(entries, message.BindEntry{RepID: botRepID, EntityType: message.BindEntityPlayer, EntityGameID: m.botEntity})
+		for _, b := range m.bots {
+			entries = append(entries, message.BindEntry{RepID: b.repID, EntityType: message.BindEntityPlayer, EntityGameID: b.entityID})
+		}
 	}
 	s.sendDataLog(packet.CmdBindPRI, message.BindPRI(entries),
 		fmt.Sprintf("cmd=118 BindPRI self ent=%#x (+%d humans, bot=%#x)", s.entityID, len(m.players)-1, m.botEntity))

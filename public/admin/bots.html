@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bot match settings</title>
+<style>body{background:#101014;color:#eee;font:16px system-ui;max-width:680px;margin:40px auto;padding:20px}a{color:#aaf}label{display:block;margin:22px 0}select,button{font:inherit;padding:10px;background:#262630;color:white;border:1px solid #666;border-radius:6px}small{display:block;color:#bbb;margin-top:6px}#status{min-height:30px}button{cursor:pointer}</style>
+<a href="/admin/">Lobby settings</a><h1>Bot matches</h1><p>Settings apply to new solo matches. Opponents start at the opposing arena gate. Human multiplayer teams keep their existing setup.</p>
+<form id="settings"><label>Opponent bots <select id="opponents"><option>1</option><option>2</option><option>3</option><option selected>4</option></select></label>
+<label>Difficulty <select id="difficulty"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select><small>Changes shot accuracy and damage.</small></label>
+<label><input type="checkbox" id="purchasing"> Buy weapons each round<small>Uses available shop weapons and a limited bot budget.</small></label>
+<label><input type="checkbox" id="cover"> Stay sheltered while reloading</label>
+<label><input type="checkbox" id="reviving"> Revive nearby downed teammates</label>
+<label><input type="checkbox" id="gloo"> Purchase and deploy defensive gloo walls</label>
+<button id="save">Save bot settings</button></form><p id="status" role="status"></p><h2>Map collision</h2><p id="geometry">Loading…</p>
+<p>Navigation and line of sight use conservative collider bounds from the installed 2022 Paradise map. Bounds may close narrow openings. Navigation currently stays at the bot’s spawn elevation; stairs and multi-floor routes require further work.</p><p>Grenade throwing and teammate bots for balanced 4v4 squads are not implemented yet.</p>
+<script>
+const keys=['purchasing','cover','reviving','gloo'];const el=id=>document.getElementById(id);function fill(s){el('opponents').value=s.opponents;el('difficulty').value=s.difficulty;keys.forEach(k=>el(k).checked=s[k]);}
+async function load(){try{const r=await fetch('/admin/api/bots');if(!r.ok)throw Error('Could not load settings');const d=await r.json();fill(d.settings);el('geometry').textContent=d.geometry.available?`${d.geometry.colliders} collider bounds loaded (${d.geometry.map}).`:'Geometry unavailable: bots cannot safely move or shoot.';}catch(e){el('status').textContent=e.message;el('save').disabled=true;}}
+el('settings').onsubmit=async e=>{e.preventDefault();el('save').disabled=true;try{const s={opponents:Number(el('opponents').value),difficulty:el('difficulty').value};keys.forEach(k=>s[k]=el(k).checked);const r=await fetch('/admin/api/bots',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)});const d=await r.json();if(!r.ok)throw Error(d.error);fill(d.settings);el('status').textContent='Saved. Start a new match to apply these settings.';}catch(e){el('status').textContent=e.message;}finally{el('save').disabled=false;}};load();
+</script></html>

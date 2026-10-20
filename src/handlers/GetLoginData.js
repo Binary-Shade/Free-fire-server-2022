@@ -49,7 +49,8 @@ async function handleGetLoginData(reqObj, ctx) {
   const tcpHost = d.tcp || fallbackHost;
   const matchHost = d.match || fallbackHost;
   const gameServerIp = `${matchHost}:${p.gameServerPort || '10100'}`;
-  const chatAddr = `${fallbackHost}:${p.chatPort || '10200'}`;
+  const chatHost = d.chat || d.tcp || fallbackHost;
+  const chatAddr = `${chatHost}:${(config.ports && config.ports.chat) || p.chatPort || '10200'}`;
   // TCP gateway the client opens for server push — single-sourced from ports.tcp.
   const notificationChannel = `${tcpHost}:${(config.ports && config.ports.tcp) || p.notificationPort || '10300'}`;
 

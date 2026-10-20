@@ -16,6 +16,7 @@ module.exports = {
     live: Number(process.env.LIVE_PORT || process.env.PORT || 3000),
     login: Number(process.env.LOGIN_PORT || 3001),
     main: Number(process.env.MAIN_PORT || 3002),
+    chat: Number(process.env.CHAT_PORT || 10200),
     // TCP gateway (notification channel). Handed to the client as
     // notification_channel in GetLoginData; the client opens a persistent AES
     // socket here for server push (see protocol/TCP_PROTOCOL.md).
@@ -114,6 +115,7 @@ module.exports = {
     live: process.env.LIVE_DOMAIN || '',
     login: process.env.LOGIN_DOMAIN || '',
     main: process.env.MAIN_DOMAIN || '',
+    chat: process.env.CHAT_PUBLIC_HOST || process.env.TCP_PUBLIC_HOST || '',
     tcp: process.env.TCP_PUBLIC_HOST || '',
     match: process.env.MATCH_PUBLIC_HOST || ''
   },

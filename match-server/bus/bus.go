@@ -235,6 +235,13 @@ func (b *Bus) RegisterServer(addr string, nowUnix int64) error {
 	return b.rdb.ZAdd(b.ctx, "matchservers", redis.Z{Score: float64(nowUnix), Member: addr}).Err()
 }
 
+// SetTelemetry publishes a short-lived JSON snapshot for the admin dashboard.
+// Expiry makes process crashes self-healing: dead instances disappear without
+// a separate cleanup job.
+func (b *Bus) SetTelemetry(key, value string, ttl time.Duration) error {
+	return b.rdb.Set(b.ctx, "telemetry:match:"+key, value, ttl).Err()
+}
+
 // Close stops the drainer and subscriptions and closes the Redis connection.
 func (b *Bus) Close() error {
 	b.cancel()

@@ -78,7 +78,7 @@ async function queueSize() {
 // Build the prepare_token: an HS256 JWT carrying the player's identity and selected
 // cosmetics so the (separate-process) Go match-server can build cmd 101 PLAYER_JOIN
 // without sharing our account DB. Verified there with the same MATCH_JWT_SECRET.
-function buildPrepareToken(account, matchId, team = 0) {
+function buildPrepareToken(account, matchId, team = 0, mode = {}) {
   const acc = account || {};
   const sel = acc.selected_items || {};
   const claims = {
@@ -87,6 +87,9 @@ function buildPrepareToken(account, matchId, team = 0) {
     region: acc.region || '',
     role: acc.role || 0,
     mid: matchId,
+    map_id: Number(mode.map_id) || 1,
+    game_mode: Number(mode.game_mode) || 15,
+    match_mode: Number(mode.match_mode) || 1,
     // team: the custom-room team the host arranged (group_id 1 or 2). 0 = "server chooses" — the
     // matchmaker/queue path passes nothing, so the match server keeps its balance-fill. A room passes
     // the member's group_id so the match faction (entity-id hibyte + FACTION_ID) is deterministic.
@@ -181,7 +184,8 @@ async function tick() {
     }
     for (const entries of groups.values()) {
       entries.sort((a, b) => a.joinedAt - b.joinedAt); // oldest first (fairness)
-      const enough = entries.length >= MIN_PLAYERS;
+      const training = Number(entries[0].mode.game_mode) === 23 && Number(entries[0].mode.map_id) === 7;
+      const enough = training || entries.length >= MIN_PLAYERS;
       const timedOut = entries.some((e) => now - e.joinedAt >= TIMEOUT_MS);
       if (enough || timedOut) await formMatch(entries.slice(0, MATCH_SIZE));
     }
@@ -207,7 +211,7 @@ async function formMatch(entries) {
     if (!(await bus.getNode(e.accountId))) { logger.info(`[mm] skip offline uid=${e.accountId}`); continue; }
     const account = await getRepo().getById(e.accountId);
     if (!account) { logger.warn(`[mm] uid=${e.accountId} not found — skip`); continue; }
-    const prepareToken = buildPrepareToken(account, matchId);
+    const prepareToken = buildPrepareToken(account, matchId, 0, mode);
     const content = Suss ? Buffer.from(Suss.encode(Suss.fromObject({
       match_id: matchId,
       server_addr: serverAddr,
@@ -216,7 +220,7 @@ async function formMatch(entries) {
       sleep_ms: 1,
       map_id: mode.map_id,
       game_mode: mode.game_mode,
-      match_mode: 6 /*mode.match_mode*/, // forced 6 so client renders waiting for players dialogue
+      match_mode: Number(mode.game_mode) === 23 ? mode.match_mode : 6,
       difficulty: mode.difficulty || 0,
       use_cache: false,
       first_login: false

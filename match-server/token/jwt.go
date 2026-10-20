@@ -44,6 +44,9 @@ type Claims struct {
 	Region    string `json:"region"`
 	Role      uint32 `json:"role"`
 	MatchID   uint64 `json:"mid"`
+	MapID     uint32 `json:"map_id"`
+	GameMode  uint32 `json:"game_mode"`
+	MatchMode uint32 `json:"match_mode"`
 	Team      uint8  `json:"team"` // custom-room team (group_id 1/2); 0/absent => the match server chooses (balance-fill)
 	Show      *Show  `json:"show,omitempty"`
 	IssuedAt  int64  `json:"iat"`

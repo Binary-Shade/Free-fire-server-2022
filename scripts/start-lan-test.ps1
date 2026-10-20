@@ -1,6 +1,7 @@
 param(
   [string]$LanAddress = '',
-  [string]$OutputDirectory = ''
+  [string]$OutputDirectory = '',
+  [switch]$DirectClient
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,7 +33,12 @@ New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $node = 'C:\Program Files\nodejs\node.exe'
 $mitmdump = 'C:\Program Files\mitmproxy\bin\mitmdump.exe'
 $valkey = 'D:\Games\tools\valkey-9.1.2\Valkey-9.1.2-Windows-x64-msys2\valkey-server.exe'
-$matchServer = Join-Path $repoRoot 'match-server\match-server.exe'
+$trainingServer = Join-Path $repoRoot 'match-server\match-server-training.exe'
+$matchServer = if (Test-Path -LiteralPath $trainingServer) {
+  $trainingServer
+} else {
+  Join-Path $repoRoot 'match-server\match-server.exe'
+}
 $dbFile = Join-Path $repoRoot 'data\apk-local-test.db'
 
 foreach ($required in @($node, $mitmdump, $valkey, $matchServer)) {
@@ -79,10 +85,13 @@ $started = @()
 $started += Start-LanProcess 'valkey' $valkey @('--bind', '127.0.0.1', '--port', '6379', '--save', '\"\"', '--appendonly', 'no')
 Start-Sleep -Milliseconds 500
 $started += Start-LanProcess 'live' $node @('src\servers\live.js') ($common + @{ LIVE_PORT = '3000'; GAME_VERSION = '1.70.4'; NODE_ID = 'lan-live' })
-$started += Start-LanProcess 'auth' $node @('scripts\apk-local-auth-server.js') ($common + @{ AUTH_LOGIN_PORT = '25565'; CONNECT_PORT = '5000'; NODE_ID = 'lan-auth' })
+$mainUrl = if ($DirectClient) { "http://${LanAddress}:3002" } else { 'https://loginbp2.samosasmobiles.dpdns.org' }
+if (-not $DirectClient) {
+  $started += Start-LanProcess 'auth' $node @('scripts\apk-local-auth-server.js') ($common + @{ AUTH_LOGIN_PORT = '25565'; CONNECT_PORT = '5000'; NODE_ID = 'lan-auth' })
+}
 $started += Start-LanProcess 'login' $node @('src\servers\login.js') ($common + @{
   LOGIN_PORT = '3001'; NODE_ID = 'lan-login'
-  SERVER_URL = 'https://loginbp2.samosasmobiles.dpdns.org'
+  SERVER_URL = $mainUrl
   LOGIN_DOMAIN = 'https://loginbp.samosasmobiles.dpdns.org'
   MAIN_DOMAIN = 'https://loginbp2.samosasmobiles.dpdns.org'
 })
@@ -94,12 +103,21 @@ $started += Start-LanProcess 'matchmaker' $node @('src\servers\matchmaker.js') (
 $started += Start-LanProcess 'match-server' $matchServer @('-addr', ':10100') ($common + @{
   NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '1'; MATCH_NO_ZONE = '1'
 })
-$started += Start-LanProcess 'proxy' $mitmdump @('-s', 'scripts\apk-local-proxy.py', '--listen-host', '0.0.0.0', '-p', '8080', '-w', 'data\apk-lan-test.mitm') @{}
+if (-not $DirectClient) {
+  # Intercept only known game hosts. Other phone traffic remains an opaque
+  # tunnel, which avoids certificate failures in YouTube and unrelated apps.
+  $gameHosts = '^(privatefreefirebackend\.vercel\.app|loginbp\.samosasmobiles\.dpdns\.org|loginbp2\.samosasmobiles\.dpdns\.org|auth\.samosasmobiles\.dpdns\.org|g\.samosasmobiles\.dpdns\.org|100067\.msdk\.garena\.com)(:[0-9]+)?$'
+  $started += Start-LanProcess 'proxy' $mitmdump @('-s', 'scripts\apk-local-proxy.py', '--listen-host', '0.0.0.0', '-p', '8080', '--allow-hosts', $gameHosts, '-w', 'data\apk-lan-test.mitm') @{}
+}
 
 $started | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'processes.json') -Encoding UTF8
 Start-Sleep -Seconds 2
 
 Write-Host "LAN Free Fire stack started for $LanAddress"
-Write-Host "Phone Wi-Fi proxy: $LanAddress port 8080"
+if ($DirectClient) {
+  Write-Host 'Direct client mode: phone Wi-Fi proxy must be disabled'
+} else {
+  Write-Host "Phone Wi-Fi proxy: $LanAddress port 8080"
+}
 Write-Host "Logs: $OutputDirectory"
 $started | Format-Table Name, Id, Log -AutoSize

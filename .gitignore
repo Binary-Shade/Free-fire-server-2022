@@ -24,3 +24,17 @@ data/*.log
 data/*.err.log
 data/lan-test/
 scratch_body.txt
+.cache/
+
+.venv-assets/
+.tmp/
+data/bot-settings.json
+
+# Local tool metadata and generated caches
+auth/.agents/
+auth/skills-lock.json
+scripts/__pycache__/
+*.pyc
+
+# Proxy certificates are generated per installation and include private keys
+deploy/**/proxy/ca/

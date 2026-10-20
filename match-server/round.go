@@ -74,9 +74,11 @@ func yawByte(face message.Vec3) byte {
 // it — the entity id and RepID stay stable (no per-round new entity).
 func (s *session) respawnBot() {
 	m := s.match
-	m.broadcastData(packet.CmdPlayerJoin, message.PlayerJoin(m.bot, m.serverTick()),
-		fmt.Sprintf("cmd=101 BOT respawn (same ent=%#x) pos=(%.1f,%.1f,%.1f)",
-			m.botEntity, m.bot.SpawnPos.X, m.bot.SpawnPos.Y, m.bot.SpawnPos.Z))
-	m.tpSeq++
-	m.broadcastData(packet.CmdTeleport, message.ForceTeleport(m.botEntity, m.tpSeq, m.bot.SpawnPos, m.bot.SpawnFace, 0), "")
+	for i, b := range m.bots {
+		p := m.botSpawn(b.entityID, i)
+		m.broadcastData(packet.CmdPlayerJoin, message.PlayerJoin(p, m.serverTick()), "bot respawn")
+		m.tpSeq++
+		m.broadcastData(packet.CmdTeleport, message.ForceTeleport(b.entityID, m.tpSeq, p.SpawnPos, p.SpawnFace, 0), "")
+	}
+	m.syncBotInventory()
 }

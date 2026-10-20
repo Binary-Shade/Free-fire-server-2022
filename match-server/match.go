@@ -30,23 +30,31 @@ type Match struct {
 	done       chan struct{}
 
 	// Shared world state (moved off the session in Step 4a — the whole match sees ONE of each).
-	round      int               // 1-based CS round
-	teamScore  [2]uint8          // rounds won: [0]=local (faction 0), [1]=enemy (faction 1)
-	lossStreak [2]uint8          // consecutive rounds LOST per team (drives the CS loss-bonus ladder)
-	firstBlood uint32            // entity that got THIS round's first cross-team kill (0 = none yet); reset each round in endFight
-	reseedCount int              // how many times the cmd-101 roster has been re-emitted for the replay recording (see reseedJoinBurst)
-	lastReseed  time.Time        // throttle marker for the reseed window
-	wheelKicked bool             // whether the one-shot replay weapon-wheel kick (cmd-108 on-hand toggle) has fired (see kickObserverWheel)
-	settings   matchSettings     // per-match CS config (round count / economy); defaults + custom-room overrides
-	matchStart time.Time         // CS clock origin (phase countdowns read param - secondsSinceMatchStart)
-	tpSeq      uint32            // force-teleport token sequence (round-transition repositions)
-	arena      csArena           // spawn city for the current round (re-picked each round)
-	bot        joinPlayer        // the current-round enemy bot (becomes a roster *player in 4c)
-	botEntity  uint32            // the (fixed) enemy bot entity id
-	hp         map[uint32]uint16 // entity id -> current HP (player + bot); splits to per-player in 4c
-	kills      map[uint32]uint16 // entity id -> match kill count (scoreboard, PRI field 10)
-	deaths     map[uint32]uint16 // entity id -> match death count (PRI field 29)
-	damage     map[uint32]uint32 // entity id -> total damage dealt (PRI field 31)
+	round       int           // 1-based CS round
+	teamScore   [2]uint8      // rounds won: [0]=local (faction 0), [1]=enemy (faction 1)
+	lossStreak  [2]uint8      // consecutive rounds LOST per team (drives the CS loss-bonus ladder)
+	firstBlood  uint32        // entity that got THIS round's first cross-team kill (0 = none yet); reset each round in endFight
+	reseedCount int           // how many times the cmd-101 roster has been re-emitted for the replay recording (see reseedJoinBurst)
+	lastReseed  time.Time     // throttle marker for the reseed window
+	wheelKicked bool          // whether the one-shot replay weapon-wheel kick (cmd-108 on-hand toggle) has fired (see kickObserverWheel)
+	settings    matchSettings // per-match CS config (round count / economy); defaults + custom-room overrides
+	mapID       uint32
+	gameMode    uint32
+	matchID     uint64
+	training    bool       // Alpha Island Training Grounds: persistent, without the CS state machine
+	matchStart  time.Time  // CS clock origin (phase countdowns read param - secondsSinceMatchStart)
+	tpSeq       uint32     // force-teleport token sequence (round-transition repositions)
+	arena       csArena    // spawn city for the current round (re-picked each round)
+	bot         joinPlayer // the current-round enemy bot (becomes a roster *player in 4c)
+	botEntity   uint32     // the (fixed) enemy bot entity id
+	bots        []*botAgent
+	botOptions  botSettings
+	botAI       *botAgent         // server-controlled movement/combat state for the filler bot
+	botRunState byte              // learned from a real moving player's cmd-1001 state byte
+	hp          map[uint32]uint16 // entity id -> current HP (player + bot); splits to per-player in 4c
+	kills       map[uint32]uint16 // entity id -> match kill count (scoreboard, PRI field 10)
+	deaths      map[uint32]uint16 // entity id -> match death count (PRI field 29)
+	damage      map[uint32]uint32 // entity id -> total damage dealt (PRI field 31)
 
 	// Shared world objects: placed gloo walls (FIFO, walls[0] oldest) + ground-loot boxes.
 	walls           []*iceWall
@@ -189,10 +197,20 @@ func (m *Match) retireBot() {
 		return
 	}
 
+	for _, b := range m.bots {
+		if b.entityID == m.botEntity {
+			continue
+		}
+		m.broadcastData(packet.CmdDead, message.PlayerDead(b.entityID, 0, 0, 0, 0, 0, b.pos, true, false), "retire bot")
+		delete(m.hp, b.entityID)
+		delete(m.life, b.entityID)
+	}
+	m.bots = nil
 	bot := m.botEntity
 	m.broadcastData(packet.CmdDead, message.PlayerDead(bot, 0, 0, 0, 0, 0, m.bot.SpawnPos, true, false),
 		fmt.Sprintf("cmd=107 BOT retired ent=%#x (2nd human joined -> human vs human)", bot))
 	m.botEntity = 0
+	m.botAI = nil
 	delete(m.hp, bot)
 	delete(m.life, bot)
 	delete(m.kills, bot)
@@ -296,6 +314,8 @@ func (m *Match) sweepDisconnects(now time.Time) {
 // draw the zone, and start the match loop. m.arena/round/bot are the match's — set once here. Later
 // players (Step 5b) are admitted onto the already-running loop instead of running this.
 func (m *Match) admitFirst(s *session) {
+	m.mapID, m.gameMode, m.matchID = s.player.MapID, s.player.GameMode, s.player.MatchID
+	m.training = m.mapID == 7 && m.gameMode == 23
 	m.loadMatchSettings(s.player.MatchID) // custom-room round count / economy (or defaults) — before the GRI/round setup
 	m.setupMatch(s)
 	s.sendDataLog(packet.CmdJoinMatchRes, message.JoinMatchRes(0, m.settings.roomSetting, m.settings.roomSetting2), "cmd=100 LGIGCGIDOKP result=0")
@@ -312,8 +332,10 @@ func (m *Match) admitFirst(s *session) {
 	s.sendDataLog(packet.CmdSyncRegionActivities, message.SyncRegionActivitiesDefault(),
 		"cmd=176 SYNC_REGION_ACTIVITIES (DEFAULT) — trigger dynamic-prefab visibility (jump pads/boxes)")
 	s.sendData(packet.CmdInGameChat, message.SendInGameMessages([]string{"Apenas testando umas coisas aqui"}, "System"))
-	s.broadcastZone()      // draw the safe zone at the NEW city now that the player joined
-	m.broadcastZoneIndex() // name that city in the round-intro UI (cmd 457 per-player zone index)
+	if !m.training {
+		s.broadcastZone()
+		m.broadcastZoneIndex()
+	}
 	s.startCSMatch()
 }
 
@@ -340,18 +362,28 @@ func (m *Match) setupMatch(s *session) {
 		m.arenasUsed = make(map[csArena]bool)
 	}
 
-	m.arena = choosePlayerSpawn(&s.player, m.arenasUsed)
-	m.arenasUsed[m.arena] = true
+	if m.training {
+		// PVP_AlphaIsland/PlayerSpawnRegion from the shipped level41 scene.
+		// The rotation quaternion (y=.9452064, w=.3264733) faces southeast.
+		s.player.SpawnPos = message.Vec3{X: 63.25, Y: 11.513, Z: 16.43}
+		s.player.SpawnFace = message.Vec3{X: 0.617, Z: -0.787}
+		s.playerPos = s.player.SpawnPos
+	} else {
+		m.arena = choosePlayerSpawn(&s.player, m.arenasUsed)
+		m.arenasUsed[m.arena] = true
+	}
 	m.addPlayer(s)
 	// choosePlayerSpawn placed the first player at the LEFT fence (localFaction=0); once addPlayer has
 	// assigned the real faction (a room can put a team-2 player in first), re-anchor to the correct
 	// fence — matching admitLater. Skipped under the fixed-spawn test override (empty arena).
-	if cfg.spawn == nil {
+	if !m.training && cfg.spawn == nil {
 		s.player.SpawnPos, s.player.SpawnFace = m.arena.spawnFor(s.faction)
 		s.playerPos = s.player.SpawnPos
 	}
 	m.round = 1
-	m.allocSlot(0) // reserve slot 2 for the filler bot (return discarded; only bumps nextSlot)
+	if !m.training {
+		m.allocSlot(0) // reserve slot 2 for the filler bot
+	}
 	m.botEntity = 0
 }
 
@@ -436,6 +468,10 @@ func (m *Match) run() {
 
 	m.matchStart = time.Now()
 	m.initHP()
+	if m.training {
+		m.runTraining()
+		return
+	}
 
 	m.enter(time.Now(), phSetupBind, bindDelay)
 	m.streamClock() // seed the client clock at t=0 (the old serverTimeLoop sent one immediately)
@@ -468,14 +504,70 @@ func (m *Match) run() {
 			}
 			m.stepZone(now)
 			m.sweepDisconnects(now) // remove pawns of clients that closed the app + never reconnected
-			m.stepKnock(now)   // bleed any downed players; a bleed-out finalizes a cmd-107 death
-			m.stepRescue(now)  // complete / cancel in-progress teammate revives
-			m.stepFlags(now)   // despawn emote-planted battle flags past their 60s lifetime
-			m.streamMovement() // Step 6: relay each human's latest cmd-1001 state to the others
+			m.stepKnock(now)        // bleed any downed players; a bleed-out finalizes a cmd-107 death
+			m.stepRescue(now)       // complete / cancel in-progress teammate revives
+			m.stepFlags(now)        // despawn emote-planted battle flags past their 60s lifetime
+			m.stepBots(now)         // server-controlled movement, targeting, firing and damage
+			m.streamMovement()      // Step 6: relay each human's latest cmd-1001 state to the others
 			for _, p := range m.players {
 				p.stepHeal(now)        // medkit heal-over-time, per player (run()-driven)
 				p.stepEP(now)          // mushroom EP -> HP regen, per player
 				p.stepHealChannel(now) // stop a stuck medkit cure animation on interrupt/timeout
+			}
+			if now.Sub(lastClock) >= clockTick {
+				m.streamClock()
+				lastClock = now
+			}
+		}
+	}
+}
+
+// runTraining owns an Alpha Island session. It remains active until the player
+// leaves and deliberately emits no CS phases, safe zone, score, or round end.
+func (m *Match) runTraining() {
+	m.started = true
+	m.bindAll()
+	m.streamClock()
+	log.Printf("[mm-udp] Training Grounds started: match=%d map=%d mode=%d players=%d", m.matchID, m.mapID, m.gameMode, len(m.players))
+
+	t := time.NewTicker(baseTick)
+	defer t.Stop()
+	lastStream, lastClock := time.Time{}, time.Now()
+	loadoutAt := time.Now().Add(setupWaitDur)
+	loadoutSent := false
+	for {
+		select {
+		case <-m.done:
+			return
+		case fn := <-m.mailbox:
+			fn()
+		case now := <-t.C:
+			if len(m.players) == 0 {
+				return
+			}
+			// The first inventory packet must land after the scene's network
+			// recorder is active; sending it beside cmd 130 during loading loses it.
+			if !loadoutSent && !now.Before(loadoutAt) {
+				m.bindAll()
+				for _, p := range m.players {
+					p.giveLoadout(true)
+				}
+				loadoutSent = true
+			}
+			if now.Sub(lastStream) >= priTick {
+				m.s.sendVar(packet.CmdPRISync, m.priPayload(), 1)
+				m.s.sweepWalls()
+				lastStream = now
+			}
+			m.sweepDisconnects(now)
+			m.stepKnock(now)
+			m.stepRescue(now)
+			m.stepFlags(now)
+			m.streamMovement()
+			for _, p := range m.players {
+				p.stepHeal(now)
+				p.stepEP(now)
+				p.stepHealChannel(now)
 			}
 			if now.Sub(lastClock) >= clockTick {
 				m.streamClock()
@@ -554,6 +646,7 @@ func (m *Match) serverTick() uint32 {
 // is static and isn't relayed — the client keeps it at its cmd-101 spawn. The seq is the subtle part.
 func (m *Match) streamMovement() {
 	matchTime := int32(time.Since(m.matchStart).Seconds() * 30)
+	m.streamBotMovement(matchTime)
 	for _, sender := range m.players {
 		if len(sender.moveBody) != moveBodyLen || sender.moveBase == 0 {
 			continue
@@ -603,6 +696,9 @@ const (
 // a live pawn). In the replay the first recorded pass spawns the pawn + seeds the observer + dismisses
 // loading; the rest no-op. Called on each cmd 1001 (handleClientPos).
 func (m *Match) reseedJoinBurst() {
+	if m.training {
+		return // Training has no CS replay observer; repeated cmd 230 disturbs its camera flow.
+	}
 	if m.reseedCount >= reseedMax {
 		return
 	}
@@ -624,7 +720,9 @@ func (m *Match) reseedJoinBurst() {
 			}
 		}
 		if m.botEntity != 0 {
-			recv.sendDataLog(packet.CmdPlayerJoin, message.PlayerJoin(m.bot, tick), "cmd=101 replay-reseed bot")
+			for i, b := range m.bots {
+				recv.sendDataLog(packet.CmdPlayerJoin, message.PlayerJoin(m.botSpawn(b.entityID, i), tick), "cmd=101 replay-reseed bot")
+			}
 		}
 		// AFTER the pawn(s) are spawned in the recording: seed the replay observer (cmd 230, type
 		// EObserverType_Replay). This is a LIVE no-op but is what makes the REPLAY dismiss its loading
@@ -817,11 +915,25 @@ func (m *Match) enterCancel(now time.Time) {
 // and rebind so its PRI replicates. See retireBot for the inverse.
 func (m *Match) spawnFallbackBot() {
 	m.botEntity = botEntityID
-	m.bot = botPlayer(m.s.player, m.botEntity)
+	m.botOptions = loadBotSettings()
+	m.botEntity = uint32(otherTeam(m.s.team))<<24 | 2
+	m.bot = m.botSpawn(m.botEntity, 0)
+	m.botAI = newBotAgent(m.bot, botRepID, otherTeam(m.s.team))
+	m.bots = []*botAgent{m.botAI}
+	for i := 1; i < m.botOptions.Opponents; i++ {
+		m.nextSlot++
+		id := uint32(otherTeam(m.s.team))<<24 | uint32(m.nextSlot)
+		p := m.botSpawn(id, i)
+		b := newBotAgent(p, playerRepID+uint32(m.nextSlot)-1, otherTeam(m.s.team))
+		m.bots = append(m.bots, b)
+		m.hp[id], m.life[id] = m.settings.maxHP, lifeAlive
+		m.broadcastData(packet.CmdPlayerJoin, message.PlayerJoin(p, m.serverTick()), "bot squad join")
+	}
 	m.hp[m.botEntity] = m.settings.maxHP
 	m.life[m.botEntity] = lifeAlive
 	m.broadcastData(packet.CmdPlayerJoin, message.PlayerJoin(m.bot, m.serverTick()),
 		fmt.Sprintf("cmd=101 BOT fallback ent=%#x (MATCH_BOT: no players found)", m.botEntity))
+	m.syncBotInventory()
 	m.bindAll()
 	log.Printf("[mm-udp] MATCH_BOT: filled the opponent with a bot ent=%#x", m.botEntity)
 }
@@ -964,7 +1076,7 @@ func (m *Match) endFight(now time.Time) {
 		p.player.SpawnPos, p.player.SpawnFace = m.arena.spawnFor(p.faction)
 	}
 	if m.botEntity != 0 {
-		m.bot = botPlayer(s.player, m.botEntity) // same entity, new spot near the primary player
+		m.bot = m.botSpawn(m.botEntity, 0)
 	}
 	log.Printf("[mm-udp] round transition -> arena=%q revivePlayer=%v %v", m.arena.City, m.revive, s.remote)
 	m.enter(now, phPostBanner, postToBlack)

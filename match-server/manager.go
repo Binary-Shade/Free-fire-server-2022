@@ -35,7 +35,7 @@ func (mgr *MatchManager) join(s *session) {
 	mgr.mu.Lock()
 	var h MatchHandle
 	for _, cand := range mgr.matches {
-		if cand.canAdmit() { // an existing match with a free slot that hasn't ended
+		if cand.canAdmit(s) { // the requested match/mode has a free slot and hasn't ended
 			h = cand
 			break
 		}

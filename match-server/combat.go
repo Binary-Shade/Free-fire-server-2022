@@ -30,6 +30,9 @@ func (m *Match) initHP() {
 	if m.botEntity != 0 {
 		m.hp[m.botEntity] = m.settings.maxHP
 		m.life[m.botEntity] = lifeAlive
+		if m.botAI == nil {
+			m.botAI = newBotAgent(m.bot, botRepID, 2)
+		}
 	}
 }
 

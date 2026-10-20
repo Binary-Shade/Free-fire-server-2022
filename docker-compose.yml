@@ -33,6 +33,8 @@ x-node: &node
     LOGIN_PORT: ${LOGIN_PORT:-3001}
     MAIN_PORT: ${MAIN_PORT:-3002}
     TCP_PORT: ${TCP_PORT:-10300}
+    CHAT_PORT: ${CHAT_PORT:-10200}
+    CHAT_PUBLIC_HOST: ${CHAT_PUBLIC_HOST:-}
     # Login hardening + auth-store gates (config.auth / src/handlers/_authGate.js).
     # Forwarded from .env so editing .env actually reaches the containers; all
     # OFF/safe by default. See .env.example for what each does.
@@ -176,6 +178,12 @@ services:
       - traefik.tcp.routers.gateway.rule=HostSNI(`*`)
       - traefik.tcp.routers.gateway.entrypoints=gateway
       - traefik.tcp.services.gateway.loadbalancer.server.port=${TCP_PORT:-10300}
+
+  chat:
+    <<: *node
+    command: ["node", "src/servers/chat.js"]
+    ports:
+      - "${CHAT_PORT:-10200}:${CHAT_PORT:-10200}/tcp"
 
   # Settlement worker — consumes stream:match.result (published by the match server at
   # match end) and persists rewards/stats to Postgres via the idempotent match_results

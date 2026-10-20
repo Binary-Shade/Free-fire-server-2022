@@ -204,6 +204,15 @@ func (s *session) handleClientPos(p *packet.Packet) {
 		} else {
 			s.moveBody[moveCoreLen] = 0
 		}
+		// Learn this exact client build's ordinary locomotion enum for server bots.
+		// Core offsets: velocity=22..27, moveState=28. Values are not stable across
+		// builds (in 1.70, the previously assumed value 2 opens the parachute).
+		vx := int16(binary.LittleEndian.Uint16(p.Payload[4+22:]))
+		vy := int16(binary.LittleEndian.Uint16(p.Payload[4+24:]))
+		vz := int16(binary.LittleEndian.Uint16(p.Payload[4+26:]))
+		if s.match != nil && (vx != 0 || vy != 0 || vz != 0) {
+			s.match.botRunState = p.Payload[4+28]
+		}
 	}
 	// The client's own send-seq rides in the wrapper's trailing u32 [41:45]; the FIRST one anchors
 	// the relay seq (moveBase) — large enough to clear the client's per-pawn seq gate.

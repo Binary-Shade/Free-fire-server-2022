@@ -87,7 +87,33 @@ class AdminCore {
     const fleet = this.bus ? await this.bus.getMatchServers().catch(() => []) : [];
     const redis = this.bus ? await this.bus.pub.ping().then(() => true).catch(() => false) : false;
     const postgres = this.pool ? await this.pool.query('SELECT 1').then(() => true).catch(() => false) : false;
-    return { online: Object.keys(presence).length, queue: Number(queue) || 0, matchServers: fleet, redis, postgres };
+    const matchTelemetry = await this._matchTelemetry();
+    return {
+      online: Object.keys(presence).length,
+      queue: Number(queue) || 0,
+      matchServers: fleet,
+      activeMatches: matchTelemetry.reduce((n, x) => n + (Number(x.matches) || 0), 0),
+      inGame: matchTelemetry.reduce((n, x) => n + (Number(x.players) || 0), 0),
+      trainingPlayers: matchTelemetry.reduce((n, x) => n + (Number(x.training_players) || 0), 0),
+      clashSquadPlayers: matchTelemetry.reduce((n, x) => n + (Number(x.clash_squad_players) || 0), 0),
+      matchTelemetry, redis, postgres
+    };
+  }
+
+  async _matchTelemetry() {
+    if (!this.bus) return [];
+    try {
+      const keys = [];
+      await new Promise((resolve, reject) => {
+        const stream = this.bus.pub.scanStream({ match: 'telemetry:match:*', count: 100 });
+        stream.on('data', (batch) => keys.push(...batch));
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+      if (!keys.length) return [];
+      const values = await this.bus.pub.mget(keys);
+      return values.map((value) => { try { return JSON.parse(value); } catch (_) { return null; } }).filter(Boolean);
+    } catch (_) { return []; }
   }
 
   // --- mutating commands ----------------------------------------------------

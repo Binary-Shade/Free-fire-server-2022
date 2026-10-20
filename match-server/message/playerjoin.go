@@ -25,6 +25,10 @@ type PlayerInfo struct {
 	// MatchID is the prepare_token `mid` — the shared match id used as the settlement
 	// idempotency key. Carried here for convenience; NOT written to the cmd 101 wire.
 	MatchID uint64
+	// Routing metadata from the prepare token; not serialized into cmd 101.
+	MapID     uint32
+	GameMode  uint32
+	MatchMode uint32
 
 	// Selected cosmetics, sourced from the JWT `show` claim / account
 	// selected_items. Wire these into the fields below as their meanings are

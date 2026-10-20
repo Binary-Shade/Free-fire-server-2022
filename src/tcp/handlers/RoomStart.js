@@ -84,7 +84,11 @@ async function handler(reqObj, ctx) {
       if (!account) { ctx.logger.warn(`[room] start uid=${m.account_id} not found — skipping their handoff`); continue; }
       // Pass the member's room team (group_id 1/2) so the match server puts them on the host-arranged
       // team (deterministic faction), instead of balance-filling by non-deterministic UDP arrival order.
-      const prepareToken = matchmaker.buildPrepareToken(account, matchId, m.group_id || 0);
+      const prepareToken = matchmaker.buildPrepareToken(account, matchId, m.group_id || 0, {
+        map_id: room.map_id,
+        game_mode: room.game_mode,
+        match_mode: ROOM_MATCH_MODE
+      });
       rooms.pushToAccount(m.account_id, ECustomRoom.MATCHMAKINGSUSS_NTF, 'MatchmakingSussNtf', {
         match_id: matchId,
         server_addr: serverAddr,

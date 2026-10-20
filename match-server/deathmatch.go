@@ -36,7 +36,15 @@ func (m *Match) broadcastDataUnreliable(cmd uint16, payload []byte, what string)
 // deathPos returns the world position to report an entity died / was knocked at: a human's
 // last-known position (it moves — e.g. a zone death where it wandered), or the bot's static spawn.
 func (m *Match) deathPos(entity uint32) message.Vec3 {
+	for _, b := range m.bots {
+		if b.entityID == entity {
+			return b.pos
+		}
+	}
 	if m.botEntity != 0 && entity == m.botEntity {
+		if m.botAI != nil {
+			return m.botAI.pos
+		}
 		return m.bot.SpawnPos
 	}
 	if vs := m.sessionByEntity(entity); vs != nil {
@@ -337,9 +345,10 @@ func (m *Match) reviveAll() {
 		m.hp[p.entityID] = m.settings.maxHP
 		p.observing = 0 // back alive -> no longer spectating (clears OB_COUNT + the relays)
 	}
-	if m.botEntity != 0 {
-		m.life[m.botEntity] = lifeAlive
-		m.hp[m.botEntity] = m.settings.maxHP
+	for i, b := range m.bots {
+		m.life[b.entityID] = lifeAlive
+		m.hp[b.entityID] = m.settings.maxHP
+		b.reset(m.botSpawn(b.entityID, i))
 	}
 	m.knock = map[uint32]*knockState{}
 	m.rescues = map[uint32]*rescueState{}
@@ -365,8 +374,10 @@ func (m *Match) firstAlive(team byte, except uint32) uint32 {
 			return p.entityID
 		}
 	}
-	if team == enemyTeamID && m.botEntity != 0 && m.botEntity != except && m.lifeOf(m.botEntity) == lifeAlive {
-		return m.botEntity
+	for _, b := range m.bots {
+		if b.team == team && b.entityID != except && m.lifeOf(b.entityID) == lifeAlive {
+			return b.entityID
+		}
 	}
 	return 0
 }

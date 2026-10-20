@@ -95,8 +95,11 @@ func resolvePlayer(tok string) joinPlayer {
 	if claims.AccountID != 0 {
 		p.AccountID = claims.AccountID
 	}
-	p.MatchID = claims.MatchID   // shared match id (settlement idempotency key)
-	p.PreferTeam = claims.Team   // custom-room team (1/2); 0 => allocSlot balance-fills
+	p.MatchID = claims.MatchID // shared match id (settlement idempotency key)
+	p.MapID = claims.MapID
+	p.GameMode = claims.GameMode
+	p.MatchMode = claims.MatchMode
+	p.PreferTeam = claims.Team // custom-room team (1/2); 0 => allocSlot balance-fills
 	if claims.Role != 0 {
 		p.Role = claims.Role
 	}
@@ -107,13 +110,13 @@ func resolvePlayer(tok string) joinPlayer {
 		p.Avatar, p.Color, p.Head, p.Banner = s.Avatar, s.Color, s.Head, s.Banner
 		p.Clothes, p.Slots = s.Clothes, s.Slots
 		p.Emotes = s.Emotes
-		p.Shows = s.Shows // showcase items -> cmd-101 -> BaseProfileInfo.Shows[7] = result-screen display weapon
+		p.Shows = s.Shows      // showcase items -> cmd-101 -> BaseProfileInfo.Shows[7] = result-screen display weapon
 		if s.BattleFlag != 0 { // the player's real equipped flag, if the token carries one
 			p.BattleFlag = s.BattleFlag
 		}
 	}
-	log.Printf("[mm-udp] prepare_token OK: acc=%d name=%q region=%q role=%d match=%d avatar=%d clothes=%d slots=%d emotes=%d",
-		p.AccountID, p.Name, claims.Region, p.Role, claims.MatchID, p.Avatar, len(p.Clothes), len(p.Slots), len(p.Emotes))
+	log.Printf("[mm-udp] prepare_token OK: acc=%d name=%q region=%q role=%d match=%d map=%d mode=%d avatar=%d clothes=%d slots=%d emotes=%d",
+		p.AccountID, p.Name, claims.Region, p.Role, claims.MatchID, p.MapID, p.GameMode, p.Avatar, len(p.Clothes), len(p.Slots), len(p.Emotes))
 	return p
 }
 

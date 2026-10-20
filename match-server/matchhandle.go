@@ -15,7 +15,7 @@ package main
 // MatchHandle is the manager's view of a match: can it take another player, claim a slot, and wire a
 // player in. Reaping compares handles by identity, so it needs no method here.
 type MatchHandle interface {
-	canAdmit() bool               // not ended and below the roster cap
+	canAdmit(s *session) bool     // same requested match/mode, not ended, below roster cap
 	reserve()                     // claim a roster slot (called under the manager lock)
 	admit(s *session, fresh bool) // wire the player in; fresh == its first player (starts run())
 }
@@ -36,7 +36,10 @@ func (localFactory) create(first *session) MatchHandle { return newMatch(first) 
 // canAdmit gates the manager's join routing: a match takes a new player only while it is still gathering
 // players — not ended, not yet STARTED (locked once it proceeds past waiting-for-players), and below the
 // roster cap. Once m.started, latecomers fall through to a fresh match.
-func (m *Match) canAdmit() bool { return !m.ended && !m.started && m.reserved < maxPlayers }
+func (m *Match) canAdmit(s *session) bool {
+	return !m.ended && !m.started && m.reserved < maxPlayers &&
+		m.matchID == s.player.MatchID && m.mapID == s.player.MapID && m.gameMode == s.player.GameMode
+}
 
 func (m *Match) reserve() { m.reserved++ }
 

@@ -1,0 +1,147 @@
+name: backend-stack
+
+x-node: &node
+  image: backend-stack-node:latest
+  build:
+    context: ../..
+    dockerfile: docker/node.Dockerfile
+  restart: unless-stopped
+  environment: &node-env
+    NODE_ENV: production
+    DEFAULT_REGION: IND
+    LOBBY_REGION: IND
+    REDIS_URL: redis://backend-stack-redis:6379
+    DATABASE_URL: ""
+    DB_FILE: /app/data/accounts.db
+    MATCH_JWT_SECRET: ${MATCH_JWT_SECRET}
+    MATCH_JWT_TTL_SEC: 600
+    LIVE_PORT: 3000
+    LOGIN_PORT: 3001
+    MAIN_PORT: 3002
+    TCP_PORT: 10300
+    CHAT_PORT: 10200
+    GAME_SERVER_PORT: 10100
+    REALTIME_HOST: ${PUBLIC_HOST}
+    TCP_PUBLIC_HOST: ${PUBLIC_HOST}
+    CHAT_PUBLIC_HOST: ${PUBLIC_HOST}
+    MATCH_PUBLIC_HOST: ${PUBLIC_HOST}
+    MATCH_ADVERTISE: ${PUBLIC_HOST}:10100
+    AUTH_ENFORCE_REGISTRATION: "false"
+    AUTH_ENFORCE_LOGIN_TOKEN: "false"
+    AUTH_ALLOW_GUEST: "true"
+    HTTP_FORCE_CONNECTION_CLOSE: "false"
+    SLOW_REQUEST_MS: 150
+  volumes:
+    - backend-stack-data:/app/data
+  depends_on:
+    backend-stack-redis:
+      condition: service_healthy
+  networks: [backend-stack-net]
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "3"
+
+services:
+  backend-stack-redis:
+    image: redis:7-alpine
+    container_name: backend-stack-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - backend-stack-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend-stack-net]
+    logging: *logging
+
+  backend-stack-live:
+    <<: *node
+    container_name: backend-stack-live
+    command: ["node", "src/servers/live.js"]
+    ports: ["127.0.0.1:3100:3000"]
+
+  backend-stack-login:
+    <<: *node
+    container_name: backend-stack-login
+    command: ["node", "src/servers/login.js"]
+    ports: ["127.0.0.1:3101:3001"]
+
+  backend-stack-main:
+    <<: *node
+    container_name: backend-stack-main
+    command: ["node", "src/servers/main.js"]
+    ports: ["127.0.0.1:3102:3002"]
+
+  backend-stack-gateway:
+    <<: *node
+    container_name: backend-stack-gateway
+    command: ["node", "src/servers/tcp.js"]
+    ports: ["10300:10300/tcp"]
+
+  chat:
+    <<: *node
+    container_name: chat
+    command: ["node", "src/servers/chat.js"]
+    environment:
+      <<: *node-env
+      BUS_SOURCE: chat
+      NODE_ID: chat-1
+    ports: ["10200:10200/tcp"]
+
+  backend-stack-matchmaker:
+    <<: *node
+    container_name: backend-stack-matchmaker
+    command: ["node", "src/servers/matchmaker.js"]
+
+  backend-stack-match:
+    image: backend-stack-match:latest
+    container_name: backend-stack-match
+    build:
+      context: ../..
+      dockerfile: docker/match.Dockerfile
+    restart: unless-stopped
+    command: ["-addr", ":10100"]
+    environment:
+      REDIS_URL: redis://backend-stack-redis:6379
+      NODE_ID: backend-stack-match-1
+      MATCH_JWT_SECRET: ${MATCH_JWT_SECRET}
+      MATCH_ADVERTISE: ${PUBLIC_HOST}:10100
+    ports: ["10100:10100/udp"]
+    depends_on:
+      backend-stack-redis:
+        condition: service_healthy
+    networks: [backend-stack-net]
+    logging: *logging
+
+  backend-stack-proxy:
+    image: mitmproxy/mitmproxy:11.0.2
+    container_name: backend-stack-proxy
+    restart: unless-stopped
+    command: ["mitmdump", "--set", "block_global=false", "--set", "connection_strategy=lazy", "-s", "/addons/backend_proxy.py", "--listen-host", "0.0.0.0", "--listen-port", "8080"]
+    environment:
+      AUTH_ORIGIN: ${AUTH_ORIGIN:-https://free-fire-auth.vercel.app}
+    ports: ["18080:8080/tcp"]
+    volumes:
+      - ./proxy/backend_proxy.py:/addons/backend_proxy.py:ro
+      - ./proxy/ca:/home/mitmproxy/.mitmproxy
+    depends_on:
+      - backend-stack-live
+      - backend-stack-login
+      - backend-stack-main
+    networks: [backend-stack-net]
+    logging: *logging
+
+networks:
+  backend-stack-net:
+    name: backend-stack-net
+
+volumes:
+  backend-stack-data:
+    name: backend-stack-data
+  backend-stack-redis:
+    name: backend-stack-redis

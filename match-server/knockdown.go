@@ -67,8 +67,10 @@ func (m *Match) teamSize(team byte) int {
 			n++
 		}
 	}
-	if team == enemyTeamID && m.botEntity != 0 {
-		n++
+	for _, b := range m.bots {
+		if b.team == team {
+			n++
+		}
 	}
 	return n
 }
@@ -81,8 +83,10 @@ func (m *Match) teamAlive(team byte) int {
 			n++
 		}
 	}
-	if team == enemyTeamID && m.botEntity != 0 && m.lifeOf(m.botEntity) == lifeAlive {
-		n++
+	for _, b := range m.bots {
+		if b.team == team && m.lifeOf(b.entityID) == lifeAlive {
+			n++
+		}
 	}
 	return n
 }
@@ -99,6 +103,11 @@ func (m *Match) resolveKillWeapon(killer uint32) (weapon, skin int32) {
 			w = 1 // fists
 		}
 		return w, int32(SkinForWeapon(uint32(w), []uint32(ks.player.Slots)))
+	}
+	for _, b := range m.bots {
+		if killer == b.entityID {
+			return int32(b.weaponData), 0
+		}
 	}
 	return 1, 0 // unknown killer (e.g. the bot) -> fists, no skin
 }
