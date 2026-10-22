@@ -381,8 +381,8 @@ func (m *Match) setupMatch(s *session) {
 		s.playerPos = s.player.SpawnPos
 	}
 	m.round = 1
-	if !m.training {
-		m.allocSlot(0) // reserve slot 2 for the filler bot
+	if !m.training && m.fallbackBotsAllowed() {
+		m.allocSlot(0) // reserve slot 2 only for non-CS diagnostic bot mode
 	}
 	m.botEntity = 0
 }
@@ -835,22 +835,17 @@ func (m *Match) enterPrepare(now time.Time) {
 		return
 	}
 	if !m.started && !m.teamsReady() {
-		if m.settings.isCustom {
-			// Custom room: the "enough players" wait/cancel is matchmaking-only. Start NOW instead of the
-			// 30s hold — filling the bot opponent immediately when MATCH_BOT is on (the match server is
-			// solo-vs-bot, so a lone host still needs an enemy). A balanced multi-human room already has
-			// teamsReady()==true and never reaches here.
-			if cfg.matchBot && m.botEntity == 0 {
-				m.spawnFallbackBot()
-			}
-			m.startBuyPhase(now)
-			return
-		}
+		// CS and custom matches wait for real players on both teams.
 		// Matchmade CS: hold + "Waiting for players" until the teams balance, then bot-fill or cancel.
 		m.enter(now, phPrepare, waitPlayersDur) // hold Prepare + show the waiting overlay (field 5 = HalfwayJoin)
 		return
 	}
 	m.startBuyPhase(now) // enough players (custom room, later round, or balanced matchmade teams): buy phase + lock
+}
+
+// fallbackBotsAllowed keeps diagnostic bots out of Clash Squad and custom rooms.
+func (m *Match) fallbackBotsAllowed() bool {
+	return cfg.matchBot && !m.settings.isCustom && m.gameMode != 15
 }
 
 // startFight begins the Fight phase (ends on the enemy/player-dead condition, not the deadline)
@@ -985,7 +980,7 @@ func (m *Match) advancePhase(now time.Time) {
 	case phPrepare:
 		if m.started {
 			m.startFight(now) // normal buy phase ended -> Fight
-		} else if cfg.matchBot { // the waiting hold expired with too few players -> bot fill (MATCH_BOT dev) ...
+		} else if m.fallbackBotsAllowed() { // explicit non-CS diagnostic fallback only
 			m.spawnFallbackBot()
 			m.startBuyPhase(now)
 		} else {

@@ -109,13 +109,13 @@ $started += Start-LanProcess 'chat' $node @('src\servers\chat.js') ($common + @{
   CHAT_PORT = '10200'; NODE_ID = 'lan-chat'
 })
 $started += Start-LanProcess 'matchmaker' $node @('src\servers\matchmaker.js') ($common + @{
-  NODE_ID = 'lan-matchmaker'; MM_MIN_PLAYERS = '1'; MM_TIMEOUT_MS = '3000'
+  NODE_ID = 'lan-matchmaker'; MM_MIN_PLAYERS = '2'; MM_TIMEOUT_MS = '3000'
 })
 $started += Start-LanProcess 'settlement' $node @('src\servers\settlement.js') ($common + @{
   NODE_ID = 'lan-settlement'
 })
 $started += Start-LanProcess 'match-server' $matchServer @('-addr', ':10100') ($common + @{
-  NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '1'; MATCH_NO_ZONE = '0'
+  NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '0'; MATCH_NO_ZONE = '0'
 })
 if (-not $DirectClient) {
   # Intercept only known game hosts. Other phone traffic remains an opaque

@@ -184,6 +184,10 @@ async function main() {
   let notOwner = false;
   try { await rooms.startMatch(999999, startRoom.id); } catch (e) { notOwner = e.code === ECustomRoomErr.NOTOWNER; }
   assert.ok(notOwner, 'non-owner start -> NOTOWNER');
+  let notEnough = false;
+  try { await rooms.startMatch(A.uid, startRoom.id); } catch (e) { notEnough = e.code === ECustomRoomErr.NOTENOUGHMEMEBERS; }
+  assert.ok(notEnough, 'solo custom room cannot start without a real opposing player');
+  await rooms.join(B, { room_id: startRoom.id });
   const startRes = await rooms.startMatch(A.uid, startRoom.id);
   assert.strictEqual(startRes.room.id, startRoom.id, 'startMatch returns the room for the handoff');
   const afterStart = await rooms.get(startRoom.id);

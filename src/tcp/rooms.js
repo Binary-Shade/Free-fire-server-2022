@@ -32,6 +32,7 @@ const SEQ_KEY = 'room:seq';
 
 const ROOM_STATE = { WAITING: 0, STARTING: 1, INGAME: 2 }; // reference tcpp.py CustomRoomInfo.state
 const ROLE_MEMBER = 1;    // tcp.ERoom.PlayerRole: NONE=0, MEMBER=1, SPECTATOR=2
+const ROLE_SPECTATOR = 2;
 const DEFAULT_MAX_MEMBERS = 8; // CS custom default (match-server manager caps at 8 too)
 const NUM_TEAMS = 2;           // CS = two groups/teams
 
@@ -407,6 +408,11 @@ async function startMatch(ownerId, roomId) {
     if (!room) throw new RoomError(ECustomRoomErr.NOROOM);
     if (room.owner !== ownerId) throw new RoomError(ECustomRoomErr.NOTOWNER);
     if (room.state !== ROOM_STATE.WAITING) throw new RoomError(ECustomRoomErr.ROOMINGAME);
+    const realMembers = room.members.filter((member) => Number(member.account_id) > 0 && member.role !== ROLE_SPECTATOR);
+    const teams = new Set(realMembers.map((member) => Number(member.group_id || 1)));
+    if (realMembers.length < 2 || !teams.has(1) || !teams.has(2)) {
+      throw new RoomError(ECustomRoomErr.NOTENOUGHMEMEBERS);
+    }
     // Flip to INGAME: hides the room from RoomList (list() filters WAITING) and makes join() reject
     // with ROOMINGAME(6) while the match is on. reenter() flips it back to WAITING on return.
     room.state = ROOM_STATE.INGAME;

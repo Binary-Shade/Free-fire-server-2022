@@ -218,10 +218,13 @@ async function tick() {
     }
     for (const entries of groups.values()) {
       entries.sort((a, b) => a.joinedAt - b.joinedAt); // oldest first (fairness)
-      const training = Number(entries[0].mode.game_mode) === 23 && Number(entries[0].mode.map_id) === 7;
+      const gameMode = Number(entries[0].mode.game_mode);
+      const training = gameMode === 23 && Number(entries[0].mode.map_id) === 7;
+      const clashSquad = gameMode === 15;
       const enough = training || entries.length >= MIN_PLAYERS;
       const timedOut = entries.some((e) => now - e.joinedAt >= TIMEOUT_MS);
-      if (enough || timedOut) {
+      // CS stays queued until enough real players are present; timeout never creates a solo bot match.
+      if (enough || (!clashSquad && timedOut)) {
         const selected = require('./party-match').selectParties(entries, Number(entries[0].mode.game_mode) === 15 ? Math.min(8, MATCH_SIZE) : MATCH_SIZE);
         if (selected.length) await formMatch(selected);
       }
