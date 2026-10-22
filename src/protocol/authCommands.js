@@ -9,7 +9,9 @@ const AUTH_COMMANDS = new Set([
   'Login',
   'PlatformLogin',
   'PlatformRegister',
-  'ChooseRegion'
+  'ChooseRegion',
+  // The 1.71 client posts rename to the login domain (port 3001).
+  'MajorModifyNickname'
 ]);
 
 module.exports = { AUTH_COMMANDS };

@@ -29,11 +29,16 @@ function handleGetGachaDesc(reqObj, ctx) {
   return {
     gacha_desc_list: [
       {
-        chest_id: 1001,
+        // Match the active chest advertised in LoginGetDesc.
+        chest_id: 88,
         chest_type: {
-          chest_id: 1001,
+          chest_id: 88,
           priority: 1,
           coin_type: 2, // GEMS
+          start_time: '2020-01-01 00:00:00',
+          end_time: '2035-12-31 23:59:59',
+          start_time_stamp: 1577836800,
+          end_time_stamp: 2082758399,
           once_price: 60,
           ten_price: 540
         },

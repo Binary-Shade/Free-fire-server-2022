@@ -29,6 +29,15 @@ scratch_body.txt
 .venv-assets/
 .tmp/
 data/bot-settings.json
+data/character-settings.json
+data/apk-local-auth.json
+data/lan-test-archive/
+data/*.png
+data/*.ab
+data/*.etl
+data/*.pcapng
+data/*capture*.txt
+data/inspect-*.js
 
 # Local tool metadata and generated caches
 auth/.agents/
