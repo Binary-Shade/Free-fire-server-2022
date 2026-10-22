@@ -9,7 +9,8 @@
 'use strict';
 
 const path = require('path');
-const { requireAccount, selectedProfile, buildSelectedItems } = require('./_shared');
+const { requireAccount, selectedProfile, buildSelectedItems, syncSelectedItemsFromProfile } = require('./_shared');
+const characters = require('../../config/character-settings');
 const GLOBAL_ITEMS = require(path.join(__dirname, '..', '..', 'config', 'items.json')).items;
 
 // GetBackpack is one of the largest responses (about 29k catalogue rows). Most
@@ -20,11 +21,14 @@ const responseCache = new Map();
 const MAX_RESPONSE_CACHE = 16;
 
 function catalogueForBadge(badgeId, badgeCount) {
-    const key = `${badgeId}:${badgeCount}`;
+    const characterKey = characters.cacheKey();
+    const key = `${badgeId}:${badgeCount}:${characterKey}`;
     let items = itemCatalogueCache.get(key);
     if (items) return items;
 
-    items = GLOBAL_ITEMS.filter((item) => item.id !== badgeId);
+    items = GLOBAL_ITEMS.filter((item) =>
+        item.id !== badgeId && (!characters.isCharacter(item.id) || characters.isEnabled(item.id))
+    );
     if (badgeCount > 0) {
         items.push({
             id: badgeId,
@@ -60,7 +64,20 @@ function handleGetBackpack(reqObj, ctx) {
     const account = requireAccount(ctx);
     if (!account) return {};
 
-    const prof = selectedProfile(account);
+    const profiles = (account.profile && account.profile.profiles) || [];
+    let prof = selectedProfile(account);
+    if (prof && !characters.isEnabled(prof.avatar_id)) {
+        const fallback = profiles.find((profile) => characters.isEnabled(profile.avatar_id));
+        if (fallback) {
+            profiles.forEach((profile) => { profile.is_selected = profile === fallback; });
+            syncSelectedItemsFromProfile(account, fallback);
+            ctx.savePlayer();
+            ctx.logger.info(`[backpack] uid=${account.uid} forced selected avatar=${fallback.avatar_id}`);
+            prof = fallback;
+        } else {
+            prof = null;
+        }
+    }
     if (prof) {
         account.selected_items = account.selected_items || {};
         const clothes = Array.isArray(prof.clothes) ? prof.clothes : [];
@@ -92,6 +109,7 @@ function handleGetBackpack(reqObj, ctx) {
         wallet.gems || 0,
         epBadgeId,
         epBadgeCount,
+        characters.cacheKey(),
         selectedItems
     ]);
     return cachedResponse(cacheKey, () => ({

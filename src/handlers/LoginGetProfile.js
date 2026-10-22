@@ -8,6 +8,9 @@
 'use strict';
 
 const { getRepo } = require('../db/repo');
+const { syncSelectedItemsFromProfile } = require('./_shared');
+const characters = require('../../config/character-settings');
+const { sanitizeLoadout } = require('../characters/skills');
 
 // The router authenticates LoginGet* endpoints and attaches ctx.account. Keep
 // the direct lookup as compatibility for callers that invoke the handler alone.
@@ -21,7 +24,21 @@ async function handleLoginGetProfile(reqObj, ctx) {
   const account = ctx.account || (await accountFromToken(ctx));
   if (!account) return {}; // reference returns 401/404; we respond benignly.
 
-  const profiles = (account.profile && account.profile.profiles) || [];
+  const allProfiles = (account.profile && account.profile.profiles) || [];
+  const profiles = allProfiles.filter((profile) => characters.isEnabled(profile.avatar_id));
+  let repaired = false;
+  for (const profile of profiles) repaired = sanitizeLoadout(profile) || repaired;
+  if (profiles.length && !profiles.some((profile) => profile.is_selected)) {
+    allProfiles.forEach((profile) => { profile.is_selected = profile === profiles[0]; });
+    syncSelectedItemsFromProfile(account, profiles[0]);
+    ctx.savePlayer();
+  }
+  if (repaired) {
+    const selected = profiles.find((profile) => profile.is_selected);
+    if (selected) syncSelectedItemsFromProfile(account, selected);
+    ctx.savePlayer();
+    ctx.logger.info(`[character] repaired multiple active skills at login uid=${account.uid}`);
+  }
 
   // Collect unique skill ids from equiped skills + selected loadouts (sorted).
   const skillSet = new Set();

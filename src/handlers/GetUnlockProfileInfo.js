@@ -11,9 +11,17 @@
 
 'use strict';
 
+const characters = require('../../config/character-settings');
+
 function handler(reqObj, ctx) {
   ctx.logger.info('[ported_6] GetUnlockProfileInfo');
-  return {};
+  const infos = [];
+  for (const avatarId of characters.enabledIds()) {
+    for (let level = 2; level <= 6; level += 1) {
+      infos.push({ avatar_id: avatarId, level, debris_count: 0, coins: level * 500, gems: 0 });
+    }
+  }
+  return { infos };
 }
 
 module.exports = {

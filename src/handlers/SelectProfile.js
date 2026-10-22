@@ -12,12 +12,17 @@
 'use strict';
 
 const { requireAccount, syncSelectedItemsFromProfile } = require('./_shared');
+const characters = require('../../config/character-settings');
 
 function handleSelectProfile(reqObj, ctx) {
   const account = requireAccount(ctx);
   if (!account) return {};
 
   const selectedId = reqObj.avatar_id;
+  if (!characters.isEnabled(selectedId)) {
+    ctx.logger.warn(`[ported_6] SelectProfile disabled avatar: ${selectedId}`);
+    return {};
+  }
   const profiles =
     (account.profile && account.profile.profiles) || [];
 

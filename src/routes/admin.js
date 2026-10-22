@@ -10,9 +10,20 @@ const router = express.Router();
 let core;
 function adminCore() { if (!core) core = new AdminCore({ actor: 'dashboard' }); return core; }
 const bots = require('../../config/bot-settings');
+const characters = require('../../config/character-settings');
 router.get('/api/bots', (_req,res,next)=>{try{res.json({settings:bots.read(),geometry:bots.geometry()});}catch(e){next(e);}});
 router.put('/api/bots', express.json({limit:'8kb'}), (req,res)=>{try{res.json({ok:true,settings:bots.save(req.body)});}catch(e){res.status(400).json({error:e.message});}});
 router.get('/bots', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin','bots.html')));
+router.get('/characters', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin','characters.html')));
+router.get('/api/characters', (_req,res)=>res.json({characters:characters.list()}));
+router.put('/api/characters', express.json({limit:'32kb'}), (req,res)=>{
+  try { res.json({ok:true,characters:characters.replace(req.body && req.body.characters)}); }
+  catch(error) { res.status(400).json({error:error.message}); }
+});
+router.put('/api/characters/:id', express.json({limit:'2kb'}), (req,res)=>{
+  try { res.json({ok:true,character:characters.setEnabled(req.params.id, req.body && req.body.enabled)}); }
+  catch(error) { res.status(400).json({error:error.message}); }
+});
 
 router.get('/api/status', async (_req, res, next) => {
   try {

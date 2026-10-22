@@ -125,14 +125,14 @@ module.exports = {
             "chest_id": 88,
             "priority": 912,
             "coin_type": 2,
-            "start_time": "2024-11-29 00:00:00",
-            "end_time": "2024-12-08 23:59:59",
+            "start_time": "2020-01-01 00:00:00",
+            "end_time": "2035-12-31 23:59:59",
             "chest_name": "T_38_LXW_GACHA_UNLIMITED_TITLE",
             "exchange_itemid": [
               0
             ],
-            "start_time_stamp": 1732849200,
-            "end_time_stamp": 1733713199,
+            "start_time_stamp": 1577836800,
+            "end_time_stamp": 2082758399,
             "once_price": 9,
             "ten_price": 79,
             "color_id": 2,

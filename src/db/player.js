@@ -91,7 +91,9 @@ function DEFAULT_PLAYER() {
         {
           avatar_id: 102000004,
           clothes: [203000001, 211000000, 204000001, 205000001],
-          equiped_skills: [{skill_id: 102000004, slot_id: 0}],
+          // Primis has no native character ability. Avatar ids are not skill ids;
+          // handing 102000004 to the match client corrupts its skill/cooldown state.
+          equiped_skills: [{skill_id: 0, slot_id: 0}],
           is_selected: true,
           skin_color: 5,
           unlocked_level: 1
@@ -99,7 +101,8 @@ function DEFAULT_PLAYER() {
         {
           avatar_id: 101000001,
           clothes: [203000166],
-          equiped_skills: [{skill_id: 101000001, slot_id: 0}],
+          // Nulla has no native character ability either.
+          equiped_skills: [{skill_id: 0, slot_id: 0}],
           is_selected: false,
           skin_color: 38,
           unlocked_level: 1

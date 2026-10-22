@@ -11,6 +11,7 @@
 'use strict';
 
 const { requireAccount, mapProfileToAvatarProfile } = require('./_shared');
+const characters = require('../../config/character-settings');
 
 function handleChangeClothes(reqObj, ctx) {
   const account = requireAccount(ctx);
@@ -21,8 +22,13 @@ function handleChangeClothes(reqObj, ctx) {
 
   // avatar_id omitted -> use the currently-selected profile (reference parity).
   if (!avatarId) {
-    const sel = profiles.find((p) => p.is_selected);
+    const sel = profiles.find((p) => p.is_selected && characters.isEnabled(p.avatar_id));
     if (sel) avatarId = sel.avatar_id;
+  }
+
+  if (!characters.isEnabled(avatarId)) {
+    ctx.logger.warn(`[ported_7] ChangeClothes disabled avatar: ${avatarId}`);
+    return {};
   }
 
   const profile = profiles.find((p) => p.avatar_id === avatarId);

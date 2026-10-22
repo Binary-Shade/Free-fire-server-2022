@@ -9,27 +9,59 @@
 'use strict';
 
 const { requireAccount } = require('./_shared');
+const characters = require('../../config/character-settings');
+const { ownedSkillIds, normalizeSlots, isActiveSkill, sanitizeLoadout } = require('../characters/skills');
 
 function handleEquipSkill(reqObj, ctx) {
   const account = requireAccount(ctx);
   if (!account) return {};
-  const avatarId = reqObj && reqObj.avatar_id;
-  const skillId = reqObj && reqObj.skill_id;
-  const slotId = (reqObj && reqObj.slot_id) || 0;
+  const avatarId = Number(reqObj && reqObj.avatar_id);
+  const skillId = Number(reqObj && reqObj.skill_id);
+  const slotId = Number(reqObj && reqObj.slot_id);
   const profiles = (account.profile && account.profile.profiles) || [];
 
-  if (avatarId != null && skillId != null) {
+  if (!characters.isEnabled(avatarId)) {
+    ctx.logger.warn(`[ported_1] EquipSkill disabled avatar: ${avatarId}`);
+    return { profiles: profiles.filter((p) => characters.isEnabled(p.avatar_id)) };
+  }
+
+  if (Number.isInteger(slotId) && slotId >= 0 && slotId <= 3 && Number.isFinite(skillId)) {
     const prof = profiles.find((p) => String(p.avatar_id) === String(avatarId));
     if (prof) {
-      prof.equiped_skills = prof.equiped_skills || [];
-      const slot = prof.equiped_skills.find((s) => String(s.slot_id) === String(slotId));
-      if (slot) slot.skill_id = skillId;
-      else prof.equiped_skills.push({ skill_id: skillId, slot_id: slotId });
+      sanitizeLoadout(prof);
+      const slots = normalizeSlots(prof);
+      const slot = slots.find((entry) => Number(entry.slot_id) === slotId);
+      if (!slot) {
+        ctx.logger.warn(`[ported_1] EquipSkill locked slot uid=${account.uid} avatar=${avatarId} slot=${slotId}`);
+        return { profiles: [prof] };
+      }
+      const native = slots.find((entry) => Number(entry.slot_id) === 0);
+      if (slotId === 0 && skillId !== Number(native && native.skill_id)) {
+        ctx.logger.warn(`[ported_1] EquipSkill attempted native-slot replacement uid=${account.uid} avatar=${avatarId}`);
+        return { profiles: [prof] };
+      }
+      if (skillId !== 0 && !ownedSkillIds(account, characters).has(skillId)) {
+        ctx.logger.warn(`[ported_1] EquipSkill unowned skill uid=${account.uid} skill=${skillId}`);
+        return { profiles: [prof] };
+      }
+      if (isActiveSkill(skillId) && slots.some((entry) => entry !== slot && isActiveSkill(entry.skill_id))) {
+        ctx.logger.warn(`[ported_1] EquipSkill second active rejected uid=${account.uid} avatar=${avatarId} skill=${skillId}`);
+        return { profiles: [prof] };
+      }
+      // A skill can only be equipped once on a character. Moving it clears its
+      // old extra slot atomically, which avoids duplicated passive effects.
+      if (skillId !== 0) {
+        for (const entry of slots) {
+          if (entry !== slot && Number(entry.slot_id) !== 0 && Number(entry.skill_id) === skillId) entry.skill_id = 0;
+        }
+      }
+      slot.skill_id = skillId;
       ctx.savePlayer();
       ctx.logger.info(`[ported_1] EquipSkill uid=${account.uid} avatar=${avatarId} skill=${skillId} slot=${slotId}`);
+      return { profiles: [prof] };
     }
   }
-  return { profiles };
+  return { profiles: [] };
 }
 
 module.exports = {

@@ -8,10 +8,9 @@
 
 'use strict';
 
-const { requireAccount } = require('./_shared');
-
-// Avatars the reference hides from the 1.17+ client (get_profiles).
-const BLOCKED_AVATARS = [102000008];
+const { requireAccount, syncSelectedItemsFromProfile } = require('./_shared');
+const characters = require('../../config/character-settings');
+const { sanitizeLoadout } = require('../characters/skills');
 
 function handleGetProfiles(reqObj, ctx) {
   const account = requireAccount(ctx);
@@ -20,18 +19,25 @@ function handleGetProfiles(reqObj, ctx) {
   const all = (account.profile && account.profile.profiles) || [];
   const filtered = all.filter((p) => {
     const avatarId = p.avatar_id || 0;
-    const skillId =
-      p.equiped_skills && p.equiped_skills[0] ? p.equiped_skills[0].skill_id || 0 : 0;
-    return !BLOCKED_AVATARS.includes(avatarId) && !BLOCKED_AVATARS.includes(skillId);
+    return characters.isEnabled(avatarId);
   });
+  let repaired = false;
+  for (const profile of filtered) repaired = sanitizeLoadout(profile) || repaired;
 
   // Ensure exactly one profile is flagged selected (reference [FIX]).
   if (filtered.length && !filtered.some((p) => p.is_selected)) {
-    filtered[0].is_selected = true;
+    all.forEach((profile) => { profile.is_selected = profile === filtered[0]; });
+    syncSelectedItemsFromProfile(account, filtered[0]);
     ctx.savePlayer();
     ctx.logger.info(
       `[ported_5] GetProfiles uid=${account.uid} forced selected avatar=${filtered[0].avatar_id}`
     );
+  }
+  if (repaired) {
+    const selected = filtered.find((profile) => profile.is_selected);
+    if (selected) syncSelectedItemsFromProfile(account, selected);
+    ctx.savePlayer();
+    ctx.logger.info(`[character] repaired multiple active skills uid=${account.uid}`);
   }
 
   return { profiles: filtered };

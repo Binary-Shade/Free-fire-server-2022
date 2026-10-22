@@ -15,9 +15,12 @@
 'use strict';
 
 const loginDesc = require('./_loginDescData');
-
 function handler(reqObj, ctx) {
   ctx.logger.info('[login] LoginGetDesc -> LoginDescRes (from _loginDescData)');
+  // Availability is expressed through ownership (LoginGetProfile/GetProfiles),
+  // not HideInfo. Keeping disabled ids out of hide_res leaves their cards in
+  // the character screen, where the missing ownership profile renders them as
+  // ordinary locked characters.
   return loginDesc;
 }
 
