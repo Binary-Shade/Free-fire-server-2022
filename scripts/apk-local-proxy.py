@@ -18,6 +18,16 @@ ROUTES = {
     "auth.samosasmobiles.dpdns.org": 25565,
     "g.samosasmobiles.dpdns.org": 5000,
     "100067.msdk.garena.com": 5000,
+    # Barbosa 1.71 wrapper equivalents. Keep version/client/game hosts
+    # upstream; only its WebView login and GOP/OAuth validation use local
+    # services.
+    "login.barbosasmobile.com": 25565,
+    "graph.barbosasmobile.com": 5000,
+    "connect.barbosasmobile.com": 5000,
+    # Barbosa's Unity layer uses these equivalents after the WebView OAuth
+    # handoff. They correspond to this project's live/version and login APIs.
+    "versionsc.barbosasmobile.com": 3000,
+    "client.barbosasmobile.com": 3001,
 }
 
 

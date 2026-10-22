@@ -144,6 +144,16 @@ module.exports = function registerGraphRoutes(app, { guests }) {
     return res.status(200).json({ success: true });
   });
 
+  // Facebook Android SDK 9 requests this during bootstrap before opening the
+  // OAuth dialog. An empty gatekeeper set means all optional SDK experiments
+  // stay at their built-in defaults. Barbosa 1.71 treats a 404 here as a GOP
+  // authentication failure, so keep this ahead of the /:app_id catch-all.
+  mount('get', versioned('/:app_id/mobile_sdk_gk'), (req, res) => {
+    return res.status(200).json({
+      data: [{ gatekeepers: [] }],
+    });
+  });
+
   mount('get', versioned('/:app_id'), (req, res) => {
     // App-config response matching the original server's payload.
     return res.status(200).json({

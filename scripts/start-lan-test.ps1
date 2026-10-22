@@ -40,6 +40,7 @@ $matchServer = if (Test-Path -LiteralPath $trainingServer) {
   Join-Path $repoRoot 'match-server\match-server.exe'
 }
 $dbFile = Join-Path $repoRoot 'data\apk-local-test.db'
+$authStoreFile = Join-Path $repoRoot 'data\apk-local-auth.json'
 
 foreach ($required in @($node, $mitmdump, $valkey, $matchServer)) {
   if (-not (Test-Path -LiteralPath $required)) { throw "Required executable is missing: $required" }
@@ -69,7 +70,13 @@ function Start-LanProcess {
       [Environment]::SetEnvironmentVariable($entry.Key, $previous[$entry.Key], 'Process')
     }
   }
-  [pscustomobject]@{ Name = $Name; Id = $process.Id; Log = $outLog }
+  [pscustomobject]@{
+    Name = $Name
+    Id = $process.Id
+    ProcessName = $process.ProcessName
+    StartTimeUtc = $process.StartTime.ToUniversalTime().ToString('o')
+    Log = $outLog
+  }
 }
 
 $common = @{
@@ -79,6 +86,7 @@ $common = @{
   TCP_PUBLIC_HOST = $LanAddress
   MATCH_PUBLIC_HOST = $LanAddress
   GAME_SERVER_PORT = '10100'
+  AUTH_STORE_FILE = $authStoreFile
 }
 
 $started = @()
@@ -97,21 +105,44 @@ $started += Start-LanProcess 'login' $node @('src\servers\login.js') ($common + 
 })
 $started += Start-LanProcess 'main' $node @('src\servers\main.js') ($common + @{ MAIN_PORT = '3002'; NODE_ID = 'lan-main' })
 $started += Start-LanProcess 'tcp' $node @('src\servers\tcp.js') ($common + @{ TCP_PORT = '10300'; NODE_ID = 'lan-gateway' })
+$started += Start-LanProcess 'chat' $node @('src\servers\chat.js') ($common + @{
+  CHAT_PORT = '10200'; NODE_ID = 'lan-chat'
+})
 $started += Start-LanProcess 'matchmaker' $node @('src\servers\matchmaker.js') ($common + @{
   NODE_ID = 'lan-matchmaker'; MM_MIN_PLAYERS = '1'; MM_TIMEOUT_MS = '3000'
 })
+$started += Start-LanProcess 'settlement' $node @('src\servers\settlement.js') ($common + @{
+  NODE_ID = 'lan-settlement'
+})
 $started += Start-LanProcess 'match-server' $matchServer @('-addr', ':10100') ($common + @{
-  NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '1'; MATCH_NO_ZONE = '1'
+  NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '1'; MATCH_NO_ZONE = '0'
 })
 if (-not $DirectClient) {
   # Intercept only known game hosts. Other phone traffic remains an opaque
   # tunnel, which avoids certificate failures in YouTube and unrelated apps.
-  $gameHosts = '^(privatefreefirebackend\.vercel\.app|loginbp\.samosasmobiles\.dpdns\.org|loginbp2\.samosasmobiles\.dpdns\.org|auth\.samosasmobiles\.dpdns\.org|g\.samosasmobiles\.dpdns\.org|100067\.msdk\.garena\.com)(:[0-9]+)?$'
-  $started += Start-LanProcess 'proxy' $mitmdump @('-s', 'scripts\apk-local-proxy.py', '--listen-host', '0.0.0.0', '-p', '8080', '--allow-hosts', $gameHosts, '-w', 'data\apk-lan-test.mitm') @{}
+  $gameHosts = '^(privatefreefirebackend\.vercel\.app|loginbp\.samosasmobiles\.dpdns\.org|loginbp2\.samosasmobiles\.dpdns\.org|auth\.samosasmobiles\.dpdns\.org|g\.samosasmobiles\.dpdns\.org|100067\.msdk\.garena\.com|login\.barbosasmobile\.com|graph\.barbosasmobile\.com|connect\.barbosasmobile\.com|versionsc\.barbosasmobile\.com|client\.barbosasmobile\.com)(:[0-9]+)?$'
+  # Lazy upstream connection is required for retired hostnames such as
+  # graph.barbosasmobile.com: decrypt and rewrite the request before mitmproxy
+  # attempts DNS resolution for the original host.
+  $started += Start-LanProcess 'proxy' $mitmdump @('-s', 'scripts\apk-local-proxy.py', '--listen-host', '0.0.0.0', '-p', '8080', '--set', 'connection_strategy=lazy', '--allow-hosts', $gameHosts, '-w', 'data\apk-lan-test.mitm') @{}
 }
 
 $started | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'processes.json') -Encoding UTF8
-Start-Sleep -Seconds 2
+
+$requiredTcpPorts = @(3000, 3001, 3002, 10200, 10300)
+if (-not $DirectClient) { $requiredTcpPorts += @(5000, 25565, 8080) }
+$deadline = (Get-Date).AddSeconds(20)
+do {
+  $missingPorts = @($requiredTcpPorts | Where-Object {
+    -not (Test-NetConnection -ComputerName 127.0.0.1 -Port $_ -InformationLevel Quiet -WarningAction SilentlyContinue)
+  })
+  if ($missingPorts.Count -eq 0) { break }
+  Start-Sleep -Milliseconds 500
+} while ((Get-Date) -lt $deadline)
+
+if ($missingPorts.Count -gt 0) {
+  throw "LAN stack startup failed; ports did not become ready: $($missingPorts -join ', ')"
+}
 
 Write-Host "LAN Free Fire stack started for $LanAddress"
 if ($DirectClient) {

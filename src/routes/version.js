@@ -21,13 +21,13 @@ function loginServerUrl(localIp) {
 router.get('/ver.php', async (req, res) => {
     const requestIp = req.headers['x-forwarded-for'] || req.ip;
     const localIp = loginDomain ? '' : await getLocalIp();
-    data = {
+    const data = {
         "appstore_url": "https://play.google.com/store/apps/details?id=com.dts.freefireth",
         "billboard_msg": "",
         "cdn_url": "https://dl.cdn.freefiremobile.com/live/ABHotUpdates/",
         "client_ip": requestIp,
         "code": 0,
-        "country_code": "BR",
+        "country_code": config.protocol.defaultRegion,
         "force_to_restart_app": false,
         "gdpr_version": 2,
         "is_firewall_open": false,
