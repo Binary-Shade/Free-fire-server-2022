@@ -1,0 +1,12 @@
+'use strict';
+const assert = require('assert');
+const { selectParties } = require('../src/tcp/party-match');
+const entry = (id, party, members) => ({ accountId: id, party, partyMembers: members, mode: { game_mode: 15 } });
+const entries = [entry(1, 'a', [1,2]), entry(2, 'a', [1,2]), entry(3), entry(4)];
+const selected = selectParties(entries, 8);
+assert.strictEqual(selected.length, 4);
+assert.strictEqual(selected[0].team, selected[1].team);
+assert.notStrictEqual(selected[0].team, selected[2].team);
+assert.strictEqual(selectParties(entries.slice(1), 8).some(e => e.accountId === 2), false);
+assert.strictEqual(selectParties(entries, 1).some(e => e.party === 'a'), false);
+console.log('party matching smoke: ok');

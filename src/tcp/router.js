@@ -21,7 +21,7 @@ const rkey = (p, s) => `${p}:${s}`;
 
 function register(protocol, subcmd, fn, meta = {}) {
   routes.set(rkey(protocol, subcmd), {
-    fn, reqType: meta.reqType, resType: meta.resType, resCmd: meta.resCmd
+    fn, reqType: meta.reqType, resType: meta.resType, resCmd: meta.resCmd, preservePresence: meta.preservePresence
   });
 }
 
@@ -35,7 +35,7 @@ function load() {
     const mod = require(path.join(dir, file));
     for (const m of Array.isArray(mod) ? mod : [mod]) {
       if (m && typeof m.handler === 'function' && m.protocol != null && m.subcmd != null) {
-        register(m.protocol, m.subcmd, m.handler, { reqType: m.reqType, resType: m.resType, resCmd: m.resCmd });
+        register(m.protocol, m.subcmd, m.handler, m);
       } else {
         logger.warn(`[tcp] handler module ${file} missing protocol/subcmd/handler`);
       }
@@ -57,7 +57,7 @@ async function dispatch(ctx) {
     const R = lookup(r.reqType);
     if (R) {
       reqObj = R.toObject(R.decode(ctx.reqData), {
-        longs: Number, enums: Number, bytes: Buffer, defaults: true
+        longs: Number, enums: Number, bytes: Buffer, defaults: !r.preservePresence
       });
     }
   }

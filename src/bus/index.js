@@ -190,6 +190,7 @@ class Bus {
   // Generic Redis helpers backing the SHARED matchmaker queue (a hash) + the global
   // match-id counter. Kept generic so the matchmaker owns its own key conventions.
   hset(key, field, val) { return this.pub.hset(key, field, val); }
+  hsetMany(key, fields) { return this.pub.hset(key, fields); }
   hget(key, field) { return this.pub.hget(key, field); }
   // Plain string key with a TTL — the room START handoff writes match:<id>:settings for the
   // match server to read at match creation.

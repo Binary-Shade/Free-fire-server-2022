@@ -58,6 +58,12 @@ async function connect(port, token) {
   const next = reader(socket);
   socket.write(clientFrame(1, Buffer.from(token)));
   assert.strictEqual((await next()).cmd, 2);
+  const joined = notification(await next());
+  assert.strictEqual(joined.cmd, EChannel.JOIN_WORLD_CHAN_NTF);
+  const JoinWorld = lookup('JoinWorldChanNtf');
+  const world = JoinWorld.toObject(JoinWorld.decode(joined.content), { longs: Number, defaults: true });
+  assert.strictEqual(world.channel_id, 1);
+  assert.strictEqual(world.enable_custom_msg, true);
   return { socket, next };
 }
 function notification(frame) {

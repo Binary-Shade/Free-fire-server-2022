@@ -30,6 +30,7 @@ const { lookup } = require('../protocol/protos');
 const fleet = require('./fleet');
 const { getBus } = require('../bus/instance');
 const { getRepo } = require('../db/repo');
+const characters = require('../../config/character-settings');
 
 const MIN_PLAYERS = Number(process.env.MM_MIN_PLAYERS || 2);    // form a match at N players...
 const TIMEOUT_MS = Number(process.env.MM_TIMEOUT_MS || 10000);  // ...or after this wait
@@ -58,10 +59,23 @@ function staticAddr() {
 function enqueue(account, _gateway, mode) {
   const accountId = account.uid || account.account_id;
   const bus = getBus();
-  if (!bus || !accountId) return;
-  bus.hset(QUEUE_KEY, accountId, JSON.stringify({ node: config.nodeId, mode, joinedAt: Date.now() }))
-    .catch((e) => logger.warn(`[mm] enqueue uid=${accountId}: ${e.message}`));
+  if (!bus || !accountId) return Promise.resolve(false);
+  const queued = bus.hset(QUEUE_KEY, accountId, JSON.stringify({ node: config.nodeId, mode, joinedAt: Date.now() }))
+    .then(() => true)
+    .catch((e) => { logger.warn(`[mm] enqueue uid=${accountId}: ${e.message}`); return false; });
   logger.info(`[mm] enqueue uid=${accountId} mode=${modeKey(mode)}`);
+  return queued;
+}
+
+async function enqueueGroup(accounts, _gateway, mode) {
+  const bus = getBus();
+  if (!bus || !accounts.length) return false;
+  const ids = accounts.map(a => Number(a.uid || a.account_id));
+  const party = `${config.nodeId}:${mode.group_id}:${crypto.randomUUID()}`;
+  const fields = {};
+  for (const id of ids) fields[id] = JSON.stringify({ node: config.nodeId, mode, joinedAt: Date.now(), party, partyMembers: ids });
+  try { await bus.hsetMany(QUEUE_KEY, fields); return true; }
+  catch (err) { logger.warn(`[mm] group enqueue: ${err.message}`); return false; }
 }
 
 function cancel(accountId) {
@@ -81,6 +95,21 @@ async function queueSize() {
 function buildPrepareToken(account, matchId, team = 0, mode = {}) {
   const acc = account || {};
   const sel = acc.selected_items || {};
+  const profiles = (acc.profile && Array.isArray(acc.profile.profiles)) ? acc.profile.profiles : [];
+  // Admin-disabled characters remain stored on the account so re-enabling them
+  // restores progress, but they are not valid match identities. This guard also
+  // covers a player who was already online when an administrator locked their
+  // selected character and has not refreshed the vault yet.
+  const selectedProfile = profiles.find((profile) => profile && profile.is_selected && characters.isEnabled(profile.avatar_id)) ||
+    profiles.find((profile) => characters.isEnabled(profile.avatar_id) && Number(profile.avatar_id) === Number(sel.avatar_id)) ||
+    profiles.find((profile) => profile && characters.isEnabled(profile.avatar_id));
+  if (selectedProfile) require('../characters/skills').sanitizeLoadout(selectedProfile);
+  const skills = selectedProfile && Array.isArray(selectedProfile.equiped_skills)
+    ? selectedProfile.equiped_skills
+      .filter((slot) => Number(slot.skill_id) > 0)
+      .sort((a, b) => Number(a.slot_id) - Number(b.slot_id))
+      .map((slot) => Number(slot.skill_id))
+    : [];
   const claims = {
     aid: acc.uid || acc.account_id || 0,
     name: acc.nickname || 'Player',
@@ -95,11 +124,16 @@ function buildPrepareToken(account, matchId, team = 0, mode = {}) {
     // the member's group_id so the match faction (entity-id hibyte + FACTION_ID) is deterministic.
     team,
     show: {
-      avatar: sel.avatar_id || 0,
-      color: sel.skin_color || 0,
+      avatar: (selectedProfile && selectedProfile.avatar_id) || sel.avatar_id || 0,
+      color: (selectedProfile && selectedProfile.skin_color) || sel.skin_color || 0,
       head: sel.head_pic || 0,
       banner: sel.banner_id || 0,
-      clothes: Array.isArray(sel.clothes) ? sel.clothes : [],
+      clothes: selectedProfile && Array.isArray(selectedProfile.clothes)
+        ? selectedProfile.clothes
+        : (Array.isArray(sel.clothes) ? sel.clothes : []),
+      // Character abilities are a dedicated PProfileData.Skills list in cmd 101.
+      // They are not the SelectedItems slots/loadout list.
+      skills,
       slots: Array.isArray(sel.slots) ? sel.slots : [],
       emotes: sel.emotes && Array.isArray(sel.emotes.emotes)
         ? sel.emotes.emotes.map((e) => e.emote_id)
@@ -187,7 +221,10 @@ async function tick() {
       const training = Number(entries[0].mode.game_mode) === 23 && Number(entries[0].mode.map_id) === 7;
       const enough = training || entries.length >= MIN_PLAYERS;
       const timedOut = entries.some((e) => now - e.joinedAt >= TIMEOUT_MS);
-      if (enough || timedOut) await formMatch(entries.slice(0, MATCH_SIZE));
+      if (enough || timedOut) {
+        const selected = require('./party-match').selectParties(entries, Number(entries[0].mode.game_mode) === 15 ? Math.min(8, MATCH_SIZE) : MATCH_SIZE);
+        if (selected.length) await formMatch(selected);
+      }
     }
   } finally {
     ticking = false;
@@ -211,7 +248,7 @@ async function formMatch(entries) {
     if (!(await bus.getNode(e.accountId))) { logger.info(`[mm] skip offline uid=${e.accountId}`); continue; }
     const account = await getRepo().getById(e.accountId);
     if (!account) { logger.warn(`[mm] uid=${e.accountId} not found — skip`); continue; }
-    const prepareToken = buildPrepareToken(account, matchId, 0, mode);
+    const prepareToken = buildPrepareToken(account, matchId, e.team || 0, mode);
     const content = Suss ? Buffer.from(Suss.encode(Suss.fromObject({
       match_id: matchId,
       server_addr: serverAddr,
@@ -243,4 +280,4 @@ async function nextMatchId() { const bus = getBus(); return bus ? bus.incr(SEQ_K
 // (src/tcp/handlers/RoomStart.js) reuses the SAME match machinery (token + fleet addr + id) the
 // matchmaker uses — it just pushes the SussNtf under the ROOM protocol to the room's members
 // instead of pulling from the shared queue.
-module.exports = { enqueue, cancel, queueSize, startService, stopService, buildPrepareToken, staticAddr, nextMatchId };
+module.exports = { enqueue, enqueueGroup, cancel, queueSize, startService, stopService, buildPrepareToken, staticAddr, nextMatchId };

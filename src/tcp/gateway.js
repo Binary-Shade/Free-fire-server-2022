@@ -21,6 +21,7 @@ const authStore = require('../db/authStore');
 const { lookup } = require('../protocol/protos');
 const { CMD, INIT_ACK, decrypt, parseClientFrames, encodeServerFrame } = require('./framing');
 const tcpRouter = require('./router');
+const groupFlow = require('./handlers/GroupFlow');
 const matchmaker = require('./matchmaker');
 const rooms = require('./rooms');
 const { getBus } = require('../bus/instance');
@@ -110,6 +111,7 @@ function handleConnection(socket) {
     if (entry && sessions.get(entry.account.uid) && sessions.get(entry.account.uid).socket === socket) {
       sessions.delete(entry.account.uid);
       matchmaker.cancel(entry.account.uid);
+      groupFlow.handleDisconnect(entry.account.uid, module.exports, logger);
       rooms.handleDisconnect(entry.account.uid); // leave/dismiss any custom room + notify survivors
       markOffline(entry.account.uid); // clear cross-layer presence
       logger.info(`[tcp] disconnected uid=${entry.account.uid} (${peer})`);

@@ -128,6 +128,17 @@ function createChatServer(options = {}) {
             if (bus) await bus.setKey(`chat:presence:${account.uid}`, 'online', CHAT_PRESENCE_TTL);
             localJoin(entry, EChannelType.WORLD, WORLD_ID);
             await store.join(EChannelType.WORLD, WORLD_ID, account.uid);
+            // The 1.70 client waits for this push before enabling/rendering its
+            // global-chat channel, even though membership is created at auth time.
+            sendNotify(entry, EProtocol.CHANNEL, EChannel.JOIN_WORLD_CHAN_NTF,
+              encode('JoinWorldChanNtf', {
+                channel_id: WORLD_ID,
+                left_talk_times_default: RATE_MAX,
+                left_talk_times_fast: RATE_MAX,
+                daily_msg_limit_default: RATE_MAX,
+                daily_msg_limit_fast: RATE_MAX,
+                enable_custom_msg: true
+              }));
             for (const msg of await store.takeOffline(account.uid)) deliverLocal(account.uid, msg);
             logger.info(`[chat] authenticated uid=${account.uid}`);
             continue;

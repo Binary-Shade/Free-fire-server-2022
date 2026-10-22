@@ -39,6 +39,8 @@ module.exports = {
   EChannelErr: enumValues('tcp.EChannel.ErrCode'),
   EChat: enumValues('tcp.EChat.Proto'),
   EStats: enumValues('tcp.EStats.Proto'),
+  EGroup: enumValues('tcp.EGroup.Proto'),
+  EGroupErr: enumValues('tcp.EGroup.ErrCode'),
   EMatchmaking: enumValues('tcp.EMatchmaking.Proto'),
   EMatchmakingErr: enumValues('tcp.EMatchmaking.ErrCode'),
   // Custom rooms ride EProtocol.ROOM (14). The subcmd + error enums are BOTH nested under

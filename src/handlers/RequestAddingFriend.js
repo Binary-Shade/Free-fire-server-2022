@@ -10,7 +10,7 @@
 'use strict';
 
 const { getRepo } = require('../db/repo');
-const { requireAccount, buildAccountInfoBasic } = require('./_shared');
+const { requireAccount, DEFAULT_REGION } = require('./_shared');
 const { getBus } = require('../bus/instance');
 const { lookup } = require('../protocol/protos');
 const { EProtocol, EFriend } = require('../tcp/protocol');
@@ -34,10 +34,14 @@ async function handleRequestAddingFriend(reqObj, ctx) {
   try {
     const bus = getBus();
     if (bus && (await bus.getNode(Number(addee)))) {
-      const adderAcc = Number(adder) === Number(account.uid) ? account : await getRepo().getById(adder);
-      const T = lookup('AccountInfoBasic');
-      if (adderAcc && T) {
-        const content = Buffer.from(T.encode(T.fromObject(buildAccountInfoBasic(adderAcc))).finish());
+      const T = lookup('tcp.FriendReq');
+      if (T) {
+        const content = Buffer.from(T.encode(T.fromObject({
+          adder: Number(adder),
+          addee: Number(addee),
+          lock_region: account.region || DEFAULT_REGION,
+          noti_region: account.region || DEFAULT_REGION
+        })).finish());
         await bus.publishPS('gw.push', 'GatewayPush', {
           target_account_id: Number(addee),
           protocol: EProtocol.FRIEND,
