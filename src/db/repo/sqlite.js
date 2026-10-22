@@ -34,8 +34,32 @@ module.exports = {
   // Settlement writes the Postgres match_results ledger; the SQLite accounts store has
   // no such table. The settlement worker refuses to start without DATABASE_URL, so this
   // only trips if something misroutes to the SQLite backend.
-  async settleMatchResult() {
-    throw new Error('settleMatchResult requires the Postgres backend (set DATABASE_URL)');
+  async settleMatchResult(matchId, pr) {
+    return accounts.db.transaction(() => {
+      const inserted = accounts.db.prepare(`INSERT OR IGNORE INTO match_results
+        (match_id,account_id,coins,kills,deaths,damage,win,rank_points,xp,settled_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run(String(matchId), Number(pr.account_id),
+        pr.coins | 0, pr.kills | 0, pr.deaths | 0, pr.damage | 0, pr.win ? 1 : 0,
+        pr.rank_points | 0, pr.xp | 0, Date.now());
+      if (!inserted.changes) return { fresh: false, credited: false };
+      const account = player.getById(pr.account_id);
+      if (account) {
+        account.coins = Number(account.coins || 0) + (pr.coins | 0);
+        account.exp = Number(account.exp || 0) + (pr.xp | 0);
+        account.match_count = Number(account.match_count || 0) + 1;
+        account.win_count = Number(account.win_count || 0) + (pr.win ? 1 : 0);
+        player.save(account);
+      }
+      return { fresh: true, credited: !!account && (pr.coins | 0) > 0 };
+    })();
+  },
+  async getMatchResult(matchId, accountId) {
+    return accounts.db.prepare('SELECT * FROM match_results WHERE match_id=? AND account_id=?')
+      .get(String(matchId), Number(accountId)) || null;
+  },
+  async getMatchHistory(accountId, limit = 30) {
+    return accounts.db.prepare('SELECT * FROM match_results WHERE account_id=? ORDER BY settled_at DESC LIMIT ?')
+      .all(Number(accountId), Math.max(1, Math.min(100, Number(limit) || 30)));
   },
 
   // --- friends / friend-requests (blob-backed; mirrors the pre-relational behaviour) --

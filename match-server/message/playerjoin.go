@@ -38,6 +38,7 @@ type PlayerInfo struct {
 	Head    uint32   // head_pic
 	Banner  uint32   // banner_id
 	Clothes []uint32 // clothes item ids
+	Skills  []uint32 // equipped character skill ids, ordered by character slot
 	Slots   []uint32 // loadout slot item ids
 	Emotes  []uint32 // emote item ids
 	// BattleFlag is the equipped battle-flag config id, wired into PKPAMKEDCDC.MDDDNKCOMDF. The client reads
@@ -112,8 +113,8 @@ func (w *Writer) pkpamkedcdc(pi PlayerInfo) {
 	w.U32(pi.Avatar)      // NIDNCDNNGME
 	w.U32(pi.Color)       // FJNBPPGHKEO
 	w.U32List(pi.Clothes) // COPDEIABDCP : List<u32> (count=0)
-	w.I16(0)              // MCPGFPHMOGM : List<u32> (count=0, read-ahead)
-	w.U32(pi.Banner)      //   GFAAFGKJNCN (trailing u32 of MCPGFPHMOGM)
+	w.U32List(pi.Skills)  // MCPGFPHMOGM : PProfileData.Skills
+	w.U32(pi.Banner)      // GFAAFGKJNCN : BannerID
 	w.U32(pi.Head)        // HNMAFLDDGOK
 	w.Str("")             // IAGGMHCJINB
 	w.U32(0)              // FIGHLIMBFAB

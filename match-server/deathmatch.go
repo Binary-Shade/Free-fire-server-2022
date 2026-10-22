@@ -80,6 +80,12 @@ func (m *Match) applyDamage(victim, attacker uint32, dmg uint16, bodyPart uint8)
 		cur -= dmg
 	}
 	m.hp[victim] = cur
+	if attacker != 0 && (m.hasEquippedSkill(attacker, 1406) || m.hasEquippedSkill(attacker, 4806)) {
+		// Moco's passive is triggered by a successful damage event. Log the exact
+		// authoritative edge while the 1.70 mark-response payload is mapped; this
+		// distinguishes a missing effect packet from missing skill/equipment data.
+		log.Printf("[mm-udp] MOCO mark trigger attacker=%#x victim=%#x", attacker, victim)
+	}
 	weapon, _ := m.resolveKillWeapon(attacker) // for the hit-direction indicator + spectator relays
 	if attacker != 0 && m.teamOf(attacker) != m.teamOf(victim) {
 		m.damage[attacker] += uint32(dmg) // scoreboard total damage (PRI field 31)
@@ -189,6 +195,9 @@ func (m *Match) knockPlayer(victim, attacker uint32, bodyPart uint8) {
 // finalizeKnock turns a KNOCKED player into a real cmd-107 death using the recorded knock info. Used
 // by the bleed-out timer (stepKnock) and by teamFellToZero (team wipe).
 func (m *Match) finalizeKnock(entity uint32, ks *knockState) {
+	if dead := m.sessionByEntity(entity); dead != nil {
+		dead.stopActiveSkill(time.Now(), "player death")
+	}
 	m.creditDeath(entity, ks.killer)
 	m.life[entity] = lifeDead
 	m.hp[entity] = 0
@@ -216,6 +225,7 @@ func (m *Match) creditDeath(victim, killer uint32) {
 		if ks := m.sessionByEntity(killer); ks != nil {
 			ks.roundKills.Add(1)
 		}
+		m.applyKillPassives(killer)
 	}
 }
 
@@ -234,6 +244,9 @@ func (m *Match) teamFellToZero(team byte) {
 // human killer credits a round-kill for an enemy victim; a human victim keeps its pawn (pending
 // revive) + a spectate focus so the 1v1 round-reset (cmd 388) can resurrect it.
 func (m *Match) killEntity(victim, killer uint32, bodyPart uint8) {
+	if dead := m.sessionByEntity(victim); dead != nil {
+		dead.stopActiveSkill(time.Now(), "player death")
+	}
 	m.creditDeath(victim, killer)
 	weapon, skin := m.resolveKillWeapon(killer)
 	m.life[victim] = lifeDead
@@ -252,9 +265,14 @@ func (m *Match) killEntity(victim, killer uint32, bodyPart uint8) {
 // pawn (down) for the round-transition revive; observe is the dead client's spectate focus (0 = none,
 // e.g. the bot or a match-ending death).
 func (m *Match) emitDeath(victim, killer, weapon, weaponSkin, observe uint32, bodyPart uint8, pos message.Vec3, system, pendingRevive bool) {
-	body := message.PlayerDead(victim, killer, weapon, weaponSkin, observe, bodyPart, pos, system, pendingRevive)
+	containerID, deathLoot := m.createDeathLoot(victim, pos, system)
+	body := message.PlayerDead(victim, killer, weapon, weaponSkin, observe, bodyPart, pos, containerID, system, pendingRevive)
 	m.broadcastData(packet.CmdDead, body,
-		fmt.Sprintf("cmd=107 DEAD victim=%#x killer=%#x weapon=%d observe=%#x pending=%v", victim, killer, weapon, observe, pendingRevive))
+		fmt.Sprintf("cmd=107 DEAD victim=%#x killer=%#x weapon=%d observe=%#x box=%d pending=%v", victim, killer, weapon, observe, containerID, pendingRevive))
+	if len(deathLoot) > 0 {
+		m.broadcastData(packet.CmdAddPickupList, message.AddPickupList(deathLoot, pos, message.ContainerDeadBox),
+			fmt.Sprintf("cmd=225 death-loot box=%d victim=%#x items=%d", containerID, victim, len(deathLoot)))
+	}
 
 	// The dead client now spectates `observe`; its camera re-renders that pawn's weapon, which can drop the
 	// mounted attachments (e.g. a 2x scope reverts to the default 1x on the spectator's view). Re-send the

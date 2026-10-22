@@ -54,6 +54,46 @@ const (
 	mergeDistM float64 = 1.5
 )
 
+// createDeathLoot snapshots a dead human's carried inventory into one server-owned
+// dead-box container. Death-loot uniques use a separate high range so two players'
+// per-session inventory counters cannot collide when the survivor picks an item up.
+// The caller puts the returned container id in cmd 107, then sends the returned
+// pickup list after cmd 107 has materialised the dead-box object on each client.
+func (m *Match) createDeathLoot(victim uint32, pos message.Vec3, system bool) (uint16, []message.PickupItem) {
+	if system {
+		return 0, nil
+	}
+	s := m.sessionByEntity(victim)
+	if s == nil || len(s.clientUIDs) == 0 {
+		return 0, nil
+	}
+	s.ensureLoot()
+	id := s.allocContainerID()
+	box := &container{id: id, pos: pos, ctype: message.ContainerDeadBox}
+	items := make([]message.PickupItem, 0, len(s.clientUIDs))
+	index := uint32(1)
+	for _, carried := range s.clientUIDs {
+		if carried.data == 0 || index > 255 {
+			continue
+		}
+		count := carried.count
+		if count == 0 {
+			count = 1
+		}
+		ground := carried
+		ground.count = count
+		ground.unique = 0x70000000 | uint32(id)<<8 | index
+		box.items = append(box.items, ground)
+		items = append(items, ground.pickupItem(id))
+		index++
+	}
+	if len(items) == 0 {
+		return 0, nil
+	}
+	m.containers[id] = box
+	return id, items
+}
+
 // dropOverriddenAfterEquip removes (cmd 327) then ground-drops each weapon a purchase displaced.
 // It runs inline on the match loop AFTER the new weapon's equip (cmd 174) has been queued, so the
 // drop is the last packet out and the client — which processes our reliable sends IN ORDER — has

@@ -55,6 +55,14 @@ func (s *session) route(p *packet.Packet) {
 		s.handleUseInventory(p)
 	case packet.CmdTryUseInventory: // 131 — started channelling a consumable
 		s.handleTryUseInventory(p)
+	case packet.CmdUseActiveSkill: // 244 — active character ability button
+		s.handleUseActiveSkill(p)
+	case packet.CmdUseActiveSkillLegacy: // 235 — Barbosa/early-1.70 active ability
+		s.handleUseActiveSkill(p)
+	case packet.CmdStopActiveSkill: // 245 — client cancelled a cancelable ability
+		s.handleStopActiveSkill(p)
+	case packet.CmdStopActiveSkillLegacy: // 236 — Barbosa/early-1.70 cancel
+		s.handleStopActiveSkill(p)
 	case packet.CmdEmote: // 369 — play emote: relay the animation to others
 		s.handleEmote(p)
 	case packet.CmdBattleFlagReq: // 276 — client planted a flag-emote flag: spawn/replace the named world object
@@ -71,6 +79,14 @@ func (s *session) route(p *packet.Packet) {
 		s.handleStartRescue(p)
 	case packet.CmdStopRescue: // 143 — teammate stopped reviving
 		s.handleStopRescue(p)
+	case packet.CmdConfirmForceSync:
+		s.handleConfirmForceSync(p)
+	case packet.CmdManualChallenge:
+		s.handleManualChallenge(p)
+	case packet.CmdManualZoneEnterExit:
+		s.handleManualZoneEnterExit(p)
+	case packet.CmdAddFakeTimesReq:
+		s.handleAddFakeTimes(p)
 	default:
 		s.handleUnknown(p)
 	}
@@ -259,6 +275,67 @@ func (s *session) handleStopRescue(p *packet.Packet) {
 	}
 	target := binary.LittleEndian.Uint32(p.Payload[0:])
 	s.match.stopRescue(s.entityID, target)
+}
+
+func (s *session) handleConfirmForceSync(p *packet.Packet) {
+	if len(p.Payload) < 12 {
+		log.Printf("[mm-udp] cmd=146 short force-sync confirmation len=%d", len(p.Payload))
+		return
+	}
+	s.forceSyncEntity = binary.LittleEndian.Uint32(p.Payload[0:4])
+	s.forceSyncToken = binary.LittleEndian.Uint32(p.Payload[4:8])
+	s.forceSyncRevision = binary.LittleEndian.Uint32(p.Payload[8:12])
+	log.Printf("[mm-udp] cmd=146 force-sync confirmed entity=%#x token=%d revision=%d",
+		s.forceSyncEntity, s.forceSyncToken, s.forceSyncRevision)
+}
+
+func (s *session) handleManualChallenge(p *packet.Packet) {
+	if len(p.Payload) < 4 {
+		log.Printf("[mm-udp] cmd=280 short manual-challenge len=%d", len(p.Payload))
+		return
+	}
+	id := binary.LittleEndian.Uint32(p.Payload[:4])
+	if s.manualChallenges == nil {
+		s.manualChallenges = make(map[uint32]uint32)
+	}
+	s.manualChallenges[id]++
+	log.Printf("[mm-udp] cmd=280 manual-challenge id=%d count=%d", id, s.manualChallenges[id])
+}
+
+func (s *session) handleManualZoneEnterExit(p *packet.Packet) {
+	if len(p.Payload) < 17 {
+		log.Printf("[mm-udp] cmd=320 short manual-zone len=%d", len(p.Payload))
+		return
+	}
+	x := int32(binary.LittleEndian.Uint32(p.Payload[0:4]))
+	y := int32(binary.LittleEndian.Uint32(p.Payload[4:8]))
+	z := int32(binary.LittleEndian.Uint32(p.Payload[8:12]))
+	zoneID := binary.LittleEndian.Uint32(p.Payload[12:16])
+	entered := p.Payload[16] != 0
+	if s.manualZones == nil {
+		s.manualZones = make(map[uint32]bool)
+	}
+	if entered {
+		s.manualZones[zoneID] = true
+	} else {
+		delete(s.manualZones, zoneID)
+	}
+	log.Printf("[mm-udp] cmd=320 manual-zone id=%d entered=%t pos=(%.3f,%.3f,%.3f)",
+		zoneID, entered, float64(x)/1000, float64(y)/1000, float64(z)/1000)
+}
+
+func (s *session) handleAddFakeTimes(p *packet.Packet) {
+	if len(p.Payload) < 4 {
+		log.Printf("[mm-udp] cmd=351 short fake-times len=%d", len(p.Payload))
+		return
+	}
+	delta := binary.LittleEndian.Uint32(p.Payload[:4])
+	if ^uint32(0)-s.fakeTimes < delta {
+		s.fakeTimes = ^uint32(0)
+	} else {
+		s.fakeTimes += delta
+	}
+	log.Printf("[mm-udp] cmd=351 fake-times delta=%d total=%d", delta, s.fakeTimes)
 }
 
 // handleUnknown logs an unrecognised packet with its full payload for RE.

@@ -9,7 +9,7 @@ package message
 // fields are left at their zero default. Field order verified from
 // OGCHKCGKGKN::UnSerialize @0x346d518; the 1.70.1 layout appends 6 trailing fields over
 // the reference's v1.43 death payload, all sent as 0 here.
-func PlayerDead(victim, killer, weapon, weaponSkin, observe uint32, bodyPart uint8, pos Vec3, system, pendingRevive bool) []byte {
+func PlayerDead(victim, killer, weapon, weaponSkin, observe uint32, bodyPart uint8, pos Vec3, containerID uint16, system, pendingRevive bool) []byte {
 	w := &Writer{}
 	w.U32(victim)                                     // IHAAMHPPLMG  dead entity
 	w.U32(killer)                                     // MINLJOJIILD  killer
@@ -17,7 +17,7 @@ func PlayerDead(victim, killer, weapon, weaponSkin, observe uint32, bodyPart uin
 	w.U8(bodyPart)                                    // ODCJPCEJHPK  hit body part
 	w.vec3i(r1000(pos.X), r1000(pos.Y), r1000(pos.Z)) // GPNLMNKMJII  death position (DEACEIFBHJK)
 	w.U32(observe)                                    // CLOBKOJFKFK  ObserveID (spectate target)
-	w.U16(0)                                          // IFIDKJLBGBH  container id
+	w.U16(containerID)                                // IFIDKJLBGBH  death-loot container id
 	w.Bool(false)                                     // BPHMFOOLLLP  killer bounty buff
 	w.U32(weaponSkin)                                 // GAPBDHBOCBE  skin id
 	w.Bool(pendingRevive)                             // EODDKBKMIHI  pending revive (keep the pawn alive-but-down so cmd 388 can revive it)

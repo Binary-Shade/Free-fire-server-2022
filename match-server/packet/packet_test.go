@@ -67,3 +67,12 @@ func TestDecodeClientHello(t *testing.T) {
 		t.Fatalf("hello mismatch: %+v", got)
 	}
 }
+
+func TestActiveSkillCommandIDs(t *testing.T) {
+	if CmdUseActiveSkill != 244 || CmdStopActiveSkill != 245 || CmdSyncActiveSkill != 246 {
+		t.Fatalf("active skill commands = use:%d stop:%d sync:%d", CmdUseActiveSkill, CmdStopActiveSkill, CmdSyncActiveSkill)
+	}
+	if CmdUseActiveSkillLegacy != 235 || CmdStopActiveSkillLegacy != 236 || CmdSyncActiveSkillLegacy != 237 {
+		t.Fatalf("legacy active skill commands = use:%d stop:%d sync:%d", CmdUseActiveSkillLegacy, CmdStopActiveSkillLegacy, CmdSyncActiveSkillLegacy)
+	}
+}

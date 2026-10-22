@@ -1,6 +1,11 @@
 package main
 
-import "libmadoka/match-server/packet"
+import (
+	"encoding/hex"
+	"log"
+
+	"libmadoka/match-server/packet"
+)
 
 // Grenade / throwable sync. A throwable is a replication-entity projectile (LevelProjectile): the
 // thrower's client reports discrete events and every OTHER client spawns + simulates the grenade
@@ -14,5 +19,14 @@ import "libmadoka/match-server/packet"
 // remotes see the thrower's grenade arc, explode, and wind up. The thrower is not echoed (its own
 // client already simulates the grenade locally).
 func (s *session) handleProjectileRelay(p *packet.Packet) {
+	// 1.70 does not always emit PROJECTILE_EXPLODE or a cmd-106 damage report for
+	// the thrower's own grenade. Keep the complete throw body in the diagnostic
+	// log while its fixed-width layout is mapped; this lets us implement the
+	// authoritative fuse and blast at the real landing position instead of
+	// guessing from the player's position and damaging the wrong entity.
+	if p.Cmd == packet.CmdProjectileThrow || p.Cmd == packet.CmdProjectileExplode {
+		log.Printf("[mm-udp] GRENADE projectile cmd=%d player=%#x payload=%s",
+			p.Cmd, s.entityID, hex.EncodeToString(p.Payload))
+	}
 	s.match.broadcastToOthers(s, p.Cmd, p.Payload)
 }

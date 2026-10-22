@@ -176,12 +176,12 @@ class PostgresRepo {
       await client.query('BEGIN');
       const ins = await client.query(
         `INSERT INTO match_results
-           (match_id, account_id, coins, kills, deaths, win, rank_points, xp, settled_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           (match_id, account_id, coins, kills, deaths, damage, win, rank_points, xp, settled_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (match_id, account_id) DO NOTHING
          RETURNING account_id`,
         [matchId, pr.account_id, pr.coins | 0, pr.kills | 0, pr.deaths | 0,
-          !!pr.win, pr.rank_points | 0, pr.xp | 0, Date.now()]
+          pr.damage | 0, !!pr.win, pr.rank_points | 0, pr.xp | 0, Date.now()]
       );
       const fresh = ins.rows.length === 1; // 0 rows on conflict = already settled
       let credited = false;
@@ -203,6 +203,22 @@ class PostgresRepo {
     } finally {
       client.release();
     }
+  }
+
+  async getMatchResult(matchId, accountId) {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM match_results WHERE match_id=$1 AND account_id=$2',
+      [String(matchId), accountId]
+    );
+    return rows[0] || null;
+  }
+
+  async getMatchHistory(accountId, limit = 30) {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM match_results WHERE account_id=$1 ORDER BY settled_at DESC LIMIT $2',
+      [accountId, Math.max(1, Math.min(100, Number(limit) || 30))]
+    );
+    return rows;
   }
 
   // --- friends / friend-requests (relational; canonical over the state blob) --------

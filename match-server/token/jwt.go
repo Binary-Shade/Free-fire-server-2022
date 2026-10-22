@@ -27,6 +27,7 @@ type Show struct {
 	Head    uint32   `json:"head"`
 	Banner  uint32   `json:"banner"`
 	Clothes []uint32 `json:"clothes"`
+	Skills  []uint32 `json:"skills"`
 	Slots   []uint32 `json:"slots"`
 	Emotes  []uint32 `json:"emotes"`
 	// Shows are the account's showcase item ids; the client buckets them by CollectionSubType into

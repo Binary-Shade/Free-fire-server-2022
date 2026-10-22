@@ -36,6 +36,17 @@ db.exec(`
     last_login_at  INTEGER,
     raw_login      TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS match_results (
+    match_id TEXT NOT NULL, account_id INTEGER NOT NULL,
+    coins INTEGER NOT NULL DEFAULT 0, kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0, damage INTEGER NOT NULL DEFAULT 0,
+    win INTEGER NOT NULL DEFAULT 0, rank_points INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0, settled_at INTEGER NOT NULL,
+    PRIMARY KEY (match_id, account_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_match_results_account_time
+    ON match_results(account_id, settled_at DESC);
 `);
 
 // --- migration: add columns introduced by the player-state model ----------

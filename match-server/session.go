@@ -75,11 +75,11 @@ type session struct {
 
 	// Contra Squad economy/loadout state, owned by the match loop (run()). The buy-phase money
 	// and the current equipment slot map so purchases (cmd 408) can deduct and add items.
-	coins      uint32              // buy-phase money
-	award      uint32              // coins awarded for the round (kills + win bonus) — added to coins at the next buy phase
-	uidCounter uint32              // allocates unique item instance ids — MONOTONIC (never reset), so a new item can't collide with a stale one the client hasn't dropped yet
-	equipment  []message.Equipment // full loadout slot map (re-sent whole each sync)
-	weapons    map[byte]csWeapon   // current loadout weapons keyed by slot (2-primary placement + round-restart ammo refill)
+	coins          uint32              // buy-phase money
+	award          uint32              // coins awarded for the round (kills + win bonus) — added to coins at the next buy phase
+	uidCounter     uint32              // allocates unique item instance ids — MONOTONIC (never reset), so a new item can't collide with a stale one the client hasn't dropped yet
+	equipment      []message.Equipment // full loadout slot map (re-sent whole each sync)
+	weapons        map[byte]csWeapon   // current loadout weapons keyed by slot (2-primary placement + round-restart ammo refill)
 	clientUIDs     map[uint32]lootItem // uid -> item the client holds; source of truth for the cmd-327 respawn clear AND for dropping ANY item (cmd 112) by unique (consumables/throwables have no weapon slot)
 	itemOnHand     uint32              // unique of the currently held item
 	attachments    []attachEquip       // mounted cmd-124 attachments (per weapon); resent to a late joiner (admitLater). Recorded on mount, pruned on weapon removal, cleared on loadout wipe
@@ -122,6 +122,19 @@ type session struct {
 	// on interrupt (death/knock) or timeout so the remote cure animation never sticks. See medkit.go.
 	healChanneling   bool
 	healChannelStart time.Time
+
+	// activeSkill is the server-authoritative state for the currently activating
+	// character ability. The match tick advances it through casting, effect, and
+	// stop states; keeping it on the session makes it work in both CS and Training.
+	activeSkill activeSkillState
+
+	// Client telemetry/state acknowledgements recovered from the 1.71 RUDP enum.
+	forceSyncEntity   uint32
+	forceSyncToken    uint32
+	forceSyncRevision uint32
+	manualChallenges  map[uint32]uint32
+	manualZones       map[uint32]bool
+	fakeTimes         uint32
 
 	// Shop-mushroom EP (energy): buying a mushroom grants EP; stepEP drains it back into HP over
 	// time. mushrooms counts buys this round (capped at mushroomsPerRound); both reset each round.

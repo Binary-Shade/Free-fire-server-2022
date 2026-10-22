@@ -5,7 +5,7 @@
 // path (Phase 3) that stops match rewards/stats from evaporating: the Go server has no
 // DB, so it emits results on the bus and this worker records + credits them,
 // idempotently — at-least-once Stream delivery can't double-credit (see the ledger PK).
-// Requires DATABASE_URL (it writes the match_results ledger and credits accounts).
+// Uses the configured repository: SQLite for local tests or Postgres in production.
 const config = require('../../config/default');
 const logger = require('../logger');
 const { Bus } = require('../bus');
@@ -58,10 +58,6 @@ async function pushMatchStats(mr, repo, bus) {
 }
 
 async function main() {
-  if (!config.postgres.url) {
-    logger.error('[settlement] DATABASE_URL is required — settlement writes the Postgres ledger. Exiting.');
-    process.exit(1);
-  }
   const repo = getRepo();
   const bus = new Bus({ url: config.redis.url, source: 'settlement', node: config.nodeId });
   const consumer = config.nodeId;

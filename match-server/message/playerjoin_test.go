@@ -46,3 +46,25 @@ func TestU32List(t *testing.T) {
 		t.Fatalf("U32List = % x, want % x", w.B, want)
 	}
 }
+
+func TestPlayerProfileEncodesCharacterSkills(t *testing.T) {
+	var w Writer
+	w.pkpamkedcdc(PlayerInfo{
+		Avatar: 102000024, Color: 5,
+		Clothes: []uint32{203000001},
+		Skills:  []uint32{3806, 406},
+	})
+	off := 8 // avatar + skin color
+	clothCount := int(binary.LittleEndian.Uint16(w.B[off : off+2]))
+	off += 2 + clothCount*4
+	if got := binary.LittleEndian.Uint16(w.B[off : off+2]); got != 2 {
+		t.Fatalf("skill count = %d, want 2", got)
+	}
+	off += 2
+	if got := binary.LittleEndian.Uint32(w.B[off : off+4]); got != 3806 {
+		t.Fatalf("active skill = %d, want 3806", got)
+	}
+	if got := binary.LittleEndian.Uint32(w.B[off+4 : off+8]); got != 406 {
+		t.Fatalf("passive skill = %d, want 406", got)
+	}
+}

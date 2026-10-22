@@ -25,7 +25,7 @@ func TestVerifyRoundTrip(t *testing.T) {
 	secret := []byte("dev-match-secret-change-me")
 	tok := signForTest(map[string]any{
 		"aid": 10000001, "name": "foices", "region": "BR", "mid": 2,
-		"show": map[string]any{"avatar": 102000004, "color": 5, "clothes": []int{203000001, 211000000}},
+		"show": map[string]any{"avatar": 102000004, "color": 5, "clothes": []int{203000001, 211000000}, "skills": []int{3806, 406}},
 	}, secret)
 	c, err := Verify(tok, secret)
 	if err != nil {
@@ -36,6 +36,9 @@ func TestVerifyRoundTrip(t *testing.T) {
 	}
 	if c.Show == nil || c.Show.Avatar != 102000004 || len(c.Show.Clothes) != 2 {
 		t.Fatalf("bad show: %+v", c.Show)
+	}
+	if len(c.Show.Skills) != 2 || c.Show.Skills[0] != 3806 || c.Show.Skills[1] != 406 {
+		t.Fatalf("bad character skills: %+v", c.Show.Skills)
 	}
 }
 

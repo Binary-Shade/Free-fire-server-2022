@@ -201,13 +201,13 @@ func (m *Match) retireBot() {
 		if b.entityID == m.botEntity {
 			continue
 		}
-		m.broadcastData(packet.CmdDead, message.PlayerDead(b.entityID, 0, 0, 0, 0, 0, b.pos, true, false), "retire bot")
+		m.broadcastData(packet.CmdDead, message.PlayerDead(b.entityID, 0, 0, 0, 0, 0, b.pos, 0, true, false), "retire bot")
 		delete(m.hp, b.entityID)
 		delete(m.life, b.entityID)
 	}
 	m.bots = nil
 	bot := m.botEntity
-	m.broadcastData(packet.CmdDead, message.PlayerDead(bot, 0, 0, 0, 0, 0, m.bot.SpawnPos, true, false),
+	m.broadcastData(packet.CmdDead, message.PlayerDead(bot, 0, 0, 0, 0, 0, m.bot.SpawnPos, 0, true, false),
 		fmt.Sprintf("cmd=107 BOT retired ent=%#x (2nd human joined -> human vs human)", bot))
 	m.botEntity = 0
 	m.botAI = nil
@@ -513,6 +513,7 @@ func (m *Match) run() {
 				p.stepHeal(now)        // medkit heal-over-time, per player (run()-driven)
 				p.stepEP(now)          // mushroom EP -> HP regen, per player
 				p.stepHealChannel(now) // stop a stuck medkit cure animation on interrupt/timeout
+				p.stepActiveSkill(now) // active-character casting/effect lifecycle
 			}
 			if now.Sub(lastClock) >= clockTick {
 				m.streamClock()
@@ -568,6 +569,7 @@ func (m *Match) runTraining() {
 				p.stepHeal(now)
 				p.stepEP(now)
 				p.stepHealChannel(now)
+				p.stepActiveSkill(now)
 			}
 			if now.Sub(lastClock) >= clockTick {
 				m.streamClock()
@@ -636,6 +638,15 @@ func (m *Match) serverTick() uint32 {
 		return 0
 	}
 	return uint32(time.Since(m.matchStart).Seconds() / clientFixedDelta)
+}
+
+// gameSeconds is the float match-clock representation used by skill-state
+// messages. It shares the epoch with serverTick/cmd 1000 rather than wall time.
+func (m *Match) gameSeconds(now time.Time) float32 {
+	if m.matchStart.IsZero() {
+		return 0
+	}
+	return float32(now.Sub(m.matchStart).Seconds())
 }
 
 // streamMovement relays each human's latest cmd-1001 state to EVERY player INCLUDING the sender (Step
@@ -1026,6 +1037,12 @@ func (m *Match) advancePhase(now time.Time) {
 func (m *Match) endFight(now time.Time) {
 	s := m.s
 	m.stopZone()
+	// Character effects never cross a CS round boundary. Explicitly stop every
+	// surviving player's active effect before the post-round transition so an
+	// Alok aura cannot remain attached to a reused pawn after cmd 388 revive.
+	for _, p := range m.players {
+		p.stopActiveSkill(now, "round ended")
+	}
 	m.roundOver = true
 	localWon := m.teamAlive(localTeamID) > 0 // the surviving team won (sequential falls => first-to-fall loses)
 	winnerTeam := byte(localTeamID)
@@ -1174,7 +1191,7 @@ func (m *Match) stepZone(now time.Time) {
 		if d := dist2D(pos, m.zoneCenter); d > curR {
 			log.Printf("[mm-udp] ZONE damage: %#x %.0fm out (r=%.0f) at (%.0f,%.0f) -> -%d HP %v",
 				p.entityID, d-curR, curR, pos.X, pos.Z, zoneDamage, p.remote)
-			m.applyDamage(p.entityID, 0, zoneDamage, 0) // killer 0 -> environment zone death
+			m.applyDamage(p.entityID, 0, m.incomingEnvironmentDamage(p.entityID, zoneDamage), 0) // killer 0 -> environment zone death
 		}
 	}
 }

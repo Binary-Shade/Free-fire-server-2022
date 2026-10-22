@@ -13,13 +13,13 @@ import (
 // renders the circle + shows the timer; it never deducts HP itself, so we apply the
 // out-of-zone damage here (CS is a fixed 50 HP every 3s).
 const (
-	zoneMargin      = 20.0             // metres of buffer beyond the gates for the outer circle
-	zoneInnerRatio  = 0.01             // fully-shrunk radius as a fraction of the outer
-	zoneDefaultR    = 30.0             // outer radius when there is no arena (fixed MATCH_SPAWN)
-	zoneWaitDur     = 90 * time.Second // Fight time before the zone starts shrinking
-	zoneShrinkDur   = 30 * time.Second // time to shrink outer -> inner
-	zoneDamage      = 50               // HP lost per tick outside the zone (CS fixed)
-	zoneDamageEvery = 2 * time.Second  // damage interval (CS fixed)
+	zoneMargin      = 20.0              // metres of buffer beyond the gates for the outer circle
+	zoneInnerRatio  = 0.15              // retain a playable final circle instead of collapsing to ~1m
+	zoneDefaultR    = 30.0              // outer radius when there is no arena (fixed MATCH_SPAWN)
+	zoneWaitDur     = 90 * time.Second  // Fight time before the zone starts shrinking
+	zoneShrinkDur   = 120 * time.Second // gradual CS close; 30s made the visible edge move ~3m/s
+	zoneDamage      = 50                // HP lost per tick outside the zone (CS fixed)
+	zoneDamageEvery = 2 * time.Second   // damage interval (CS fixed)
 
 	// zoneClientLag compensates for the client rendering the shrinking circle a little
 	// behind our real-time damage clock. The client lerps its radius over [StartTime,

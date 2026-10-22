@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"libmadoka/match-server/packet"
@@ -44,6 +45,7 @@ type Writer struct {
 // (resent verbatim, keeping the same seq so the client de-dupes), the next resend deadline,
 // and how many times it has been resent.
 type pendingPkt struct {
+	label    string
 	wire     []byte
 	deadline time.Time
 	retries  int
@@ -85,6 +87,9 @@ func (w *Writer) run() {
 			}
 			w.emit(it)
 		case seq := <-w.acks:
+			if p := w.pending[seq]; p != nil && strings.Contains(p.label, "active-skill") {
+				log.Printf("[mm-udp] skill ACK seq=%d peer=%v %s", seq, w.addr, p.label)
+			}
 			delete(w.pending, seq) // client confirmed this reliable seq — stop retransmitting it
 		case now := <-t.C:
 			w.retransmit(now)
@@ -122,7 +127,7 @@ func (w *Writer) emit(it outItem) {
 	// Buffer ordered reliable data (so=2) for retransmit. HELLO (so=1) is a one-shot handshake;
 	// VAR/unreliable carry no seq, so they aren't retransmittable.
 	if it.pkt.SendOption == packet.SendReliable {
-		w.pending[it.pkt.SeqID] = &pendingPkt{wire: wire, deadline: time.Now().Add(rudpRTO)}
+		w.pending[it.pkt.SeqID] = &pendingPkt{wire: wire, deadline: time.Now().Add(rudpRTO), label: it.label}
 	}
 	if it.label != "" {
 		log.Printf("[mm-udp] -> %s (seq=%d order=%d %dB) %v", it.label, it.pkt.SeqID, it.pkt.OrderID, len(it.pkt.Payload), w.addr)
