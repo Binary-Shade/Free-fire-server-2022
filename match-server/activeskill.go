@@ -40,15 +40,19 @@ var activeSkills = map[uint32]activeSkillSpec{
 // activeSkillState is deliberately one activation per player. The 1.70 client
 // exposes one active-character button; passive skills never send cmd 244.
 type activeSkillState struct {
-	skillID     uint32
-	syncCmd     uint16
-	casting     bool
-	effecting   bool
-	castingAt   time.Time
-	effectAt    time.Time
-	effectUntil time.Time
-	lastPulse   time.Time
-	cooldownEnd time.Time
+	skillID          uint32
+	syncCmd          uint16
+	casting          bool
+	effecting        bool
+	castingAt        time.Time
+	effectAt         time.Time
+	effectUntil      time.Time
+	lastPulse        time.Time
+	cooldownEnd      time.Time
+	castSeconds      float32
+	effectEndSeconds float32
+	cooldownEndMS    uint32
+	cooldownNotified bool
 }
 
 func (s *session) handleUseActiveSkill(p *packet.Packet) {
@@ -101,10 +105,33 @@ func (s *session) handleUseActiveSkill(p *packet.Packet) {
 	st.effectAt = time.Time{}
 	st.effectUntil = time.Time{}
 	st.lastPulse = time.Time{}
+	st.cooldownNotified = false
 	if spec := activeSkills[skillID]; spec.cooldown > 0 {
 		st.cooldownEnd = now.Add(spec.cooldown)
 	} else {
 		st.cooldownEnd = time.Time{}
+	}
+	st.castSeconds = s.match.gameSeconds(now)
+	st.effectEndSeconds = s.match.gameSeconds(now.Add(activeSkills[skillID].duration))
+	st.cooldownEndMS = 0
+	if !st.cooldownEnd.IsZero() {
+		st.cooldownEndMS = uint32(s.match.gameSeconds(st.cooldownEnd) * 1000)
+	}
+	if p.Cmd == packet.CmdUseActiveSkill {
+		// Captured command-246 behavior: clear stale state first, then publish
+		// casting and effecting with one shared activation timeline. All three
+		// are ordered reliable messages and are visible to caster and remotes.
+		st.casting = false
+		st.effecting = true
+		st.effectAt = now
+		st.effectUntil = now.Add(activeSkills[skillID].duration)
+		st.lastPulse = now
+		s.applyActiveSkillStart(skillID)
+		for _, state := range []uint32{message.SkillStopEffecting, message.SkillStartCasting, message.SkillStartEffecting} {
+			s.match.broadcastData(st.syncCmd, s.activeSkillPayload(state, 0, 0),
+				fmt.Sprintf("cmd=246 active-skill state=%d player=%#x skill=%d", state, s.entityID, skillID))
+		}
+		return
 	}
 	s.match.broadcastData(st.syncCmd,
 		s.activeSkillPayload(message.SkillStartCasting, 0, s.match.gameSeconds(now)),
@@ -160,6 +187,13 @@ func (s *session) stepActiveSkill(now time.Time) {
 	if st.effecting && !now.Before(st.effectUntil) {
 		s.stopActiveSkill(now, "effect elapsed")
 	}
+	if st.syncCmd == packet.CmdSyncActiveSkill && !st.cooldownNotified &&
+		!st.cooldownEnd.IsZero() && !now.Before(st.cooldownEnd) {
+		st.cooldownNotified = true
+		s.match.broadcastData(st.syncCmd,
+			message.ActiveSkillStateCurrent(s.entityID, st.skillID, message.SkillCooldownReady, 0, 0, 0, 0, nil),
+			fmt.Sprintf("cmd=246 active-skill cooldown-ready player=%#x skill=%d", s.entityID, st.skillID))
+	}
 }
 
 func (s *session) applyActiveSkillStart(skillID uint32) {
@@ -214,12 +248,11 @@ func (s *session) stopActiveSkill(now time.Time, reason string) {
 	}
 	st.casting = false
 	st.effecting = false
-	// StopEffecting is a new state transition. Its LastEffectTime must advance
-	// to the stop instant; repeating the StartEffecting timestamp is stale and
-	// later activations can ignore it, leaving the aura attached indefinitely.
-	lastEffect := s.match.gameSeconds(now)
+	// Current command 246 repeats the activation's reset payload at expiry, as
+	// observed in the live capture. Legacy command 237 still receives the stop
+	// instant through its five-field representation.
 	s.match.broadcastData(st.syncCmd,
-		s.activeSkillPayload(message.SkillStopEffecting, lastEffect, s.match.gameSeconds(st.castingAt)),
+		s.activeSkillPayload(message.SkillStopEffecting, s.match.gameSeconds(now), s.match.gameSeconds(st.castingAt)),
 		fmt.Sprintf("cmd=246 active-skill stop player=%#x skill=%d (%s)", s.entityID, st.skillID, reason))
 }
 
@@ -241,6 +274,9 @@ func hasSkill(equipped []uint32, requested uint32) bool {
 
 func (s *session) activeSkillPayload(state uint32, effectTime, castTime float32) []byte {
 	st := &s.activeSkill
-	// Both command aliases map to this client's five-field representation.
+	if st.syncCmd == packet.CmdSyncActiveSkill {
+		return message.ActiveSkillStateCurrent(s.entityID, st.skillID, state,
+			st.castSeconds, st.cooldownEndMS, 0, st.effectEndSeconds, nil)
+	}
 	return message.ActiveSkillState(s.entityID, st.skillID, state, effectTime, castTime)
 }

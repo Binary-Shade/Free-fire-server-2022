@@ -19,17 +19,20 @@ func ActiveSkillState(playerID, skillID, state uint32, lastEffectTime, lastCasti
 	return w.B
 }
 
-// ActiveSkillState170 is retained for protocol experiments with later variants.
-// Free Fire 1.70 command 246 uses ActiveSkillState's 20-byte layout instead.
-func ActiveSkillState170(playerID, skillID, state uint32, castingTime float32, resolvedSkill uint32, phase int32, cooldownTime float32, phases []int32) []byte {
+// ActiveSkillStateCurrent builds the 30-byte command-246 layout used by the
+// current client family. A live capture established the two deadlines:
+// cooldownEndMS is the match-clock millisecond at which the button becomes
+// available again, while effectEndTime is the match-clock second at which the
+// visible effect ends.
+func ActiveSkillStateCurrent(playerID, skillID, state uint32, castTime float32, cooldownEndMS uint32, phase int32, effectEndTime float32, phases []int32) []byte {
 	w := &Writer{}
 	w.U32(playerID)
 	w.U32(skillID)
 	w.U32(state)
-	w.F32(castingTime)
-	w.U32(resolvedSkill)
+	w.F32(castTime)
+	w.U32(cooldownEndMS)
 	w.U32(uint32(phase))
-	w.F32(cooldownTime)
+	w.F32(effectEndTime)
 	w.U16(uint16(len(phases)))
 	for _, p := range phases {
 		w.U32(uint32(p))
@@ -37,8 +40,15 @@ func ActiveSkillState170(playerID, skillID, state uint32, castingTime float32, r
 	return w.B
 }
 
+// ActiveSkillState170 is kept as a source-compatible alias for older tests and
+// tools which used the provisional field names.
+func ActiveSkillState170(playerID, skillID, state uint32, castTime float32, cooldownEndMS uint32, phase int32, effectEndTime float32, phases []int32) []byte {
+	return ActiveSkillStateCurrent(playerID, skillID, state, castTime, cooldownEndMS, phase, effectEndTime, phases)
+}
+
 const (
 	SkillStartCasting   uint32 = 0
 	SkillStartEffecting uint32 = 1
 	SkillStopEffecting  uint32 = 2
+	SkillCooldownReady  uint32 = 4
 )
