@@ -2,19 +2,93 @@
 
 const crypto = require('crypto');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const lobby = require('../../config/lobby-content');
 const { AdminCore } = require('../admin/core');
+const adminAuth = require('../admin/auth');
 
 const router = express.Router();
+const adminLoginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many sign-in attempts. Wait a few minutes and try again.' } });
+router.get('/api/auth/session', (req, res) => {
+  const session = adminAuth.session(req);
+  res.status(session ? 200 : 401).json({ authenticated: !!session, configured: adminAuth.configured(), user: session && session.sub });
+});
+router.post('/api/auth/login', adminLoginLimiter, express.json({ limit: '2kb' }), (req, res) => {
+  const username = String(req.body && req.body.username || '').trim();
+  const password = String(req.body && req.body.password || '');
+  if (!adminAuth.configured()) return res.status(503).json({ error: 'Admin login is not configured. Set ADMIN_PASSWORD in .env.' });
+  if (!adminAuth.authenticate(username, password)) return res.status(401).json({ error: 'The username or password is incorrect.' });
+  res.cookie(adminAuth.COOKIE, adminAuth.issue(username), adminAuth.cookieOptions(req));
+  return res.json({ ok: true, user: username });
+});
+router.post('/api/auth/logout', (req, res) => {
+  res.clearCookie(adminAuth.COOKIE, { ...adminAuth.cookieOptions(req), maxAge: undefined });
+  res.json({ ok: true });
+});
+router.use('/api', (req, res, next) => adminAuth.session(req) ? next() : res.status(401).json({ error: 'Authentication required' }));
 let core;
 function adminCore() { if (!core) core = new AdminCore({ actor: 'dashboard' }); return core; }
 const bots = require('../../config/bot-settings');
 const characters = require('../../config/character-settings');
+const feedback = require('../../config/feedback-settings');
+const loginDescSettings = require('../../config/login-desc-settings');
+const loginDescBase = require('../handlers/_loginDescData');
+const featureSwitches = require('../../config/feature-switches');
+const voiceSettings = require('../../config/voice-settings');
+const luckRoyale = require('../../config/luck-royale');
+const { lookup } = require('../protocol/protos');
+router.get('/api/luck-royale', (_req,res,next)=>{try{res.json({settings:luckRoyale.read()});}catch(e){next(e);}});
+router.put('/api/luck-royale', express.json({limit:'64kb'}), (req,res)=>{try{res.json({ok:true,settings:luckRoyale.save(req.body)});}catch(e){res.status(400).json({error:e.message});}});
+router.get('/api/feedback', (_req,res,next)=>{try{res.json({settings:feedback.read()});}catch(e){next(e);}});
+router.put('/api/feedback', express.json({limit:'8kb'}), (req,res)=>{try{res.json({ok:true,settings:feedback.save(req.body)});}catch(e){res.status(400).json({error:e.message});}});
+function verifyLoginDesc(candidate) {
+  const Type = lookup('LoginDescRes');
+  const payload = { ...candidate, rate_app_switch_res: { switch_desc: feedback.protocolValue() } };
+  const error = Type && Type.verify(payload);
+  if (error) throw new Error(`Invalid LoginDescRes: ${error}`);
+  if (Type) Type.encode(Type.fromObject(payload)).finish();
+}
+router.get('/api/login-desc', (_req,res,next)=>{try{res.json({sections:loginDescSettings.inventory(loginDescBase)});}catch(e){next(e);}});
+router.put('/api/login-desc/:section', express.json({limit:'512kb'}), (req,res)=>{
+  try {
+    const key=req.params.section;
+    if(!Object.prototype.hasOwnProperty.call(loginDescSettings.sections,key)) throw new Error(`Unknown LoginGetDesc section: ${key}`);
+    const current=loginDescSettings.read();
+    const candidate={...current,[key]:{enabled:req.body&&req.body.enabled,data:req.body&&req.body.data}};
+    verifyLoginDesc(loginDescSettings.apply(loginDescBase,candidate));
+    res.json({ok:true,section:{key,...loginDescSettings.set(key,req.body||{})}});
+  } catch(e){res.status(400).json({error:e.message});}
+});
+router.delete('/api/login-desc/:section', (req,res)=>{
+  try { loginDescSettings.reset(req.params.section); res.json({ok:true}); }
+  catch(e){res.status(400).json({error:e.message});}
+});
+router.get('/login-desc', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
+router.get('/api/feature-switches', (_req,res,next)=>{try{res.json({switches:featureSwitches.list()});}catch(e){next(e);}});
+router.put('/api/feature-switches/:key', express.json({limit:'2kb'}), (req,res)=>{
+  try { res.json({ok:true,switch:featureSwitches.set(req.params.key,req.body&&req.body.enabled)}); }
+  catch(e) { res.status(400).json({error:e.message}); }
+});
+router.get('/feature-switches', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
+router.get('/api/voice', (_req,res)=>res.json({settings:voiceSettings.publicSettings()}));
+router.put('/api/voice', express.json({limit:'8kb'}), (req,res)=>{
+  try { res.json({ok:true,settings:voiceSettings.save(req.body)}); }
+  catch(e) { res.status(400).json({error:e.message}); }
+});
+router.post('/api/voice/test', express.json({limit:'2kb'}), async (req,res)=>{
+  try {
+    const token=await voiceSettings.issue(String(req.body&&req.body.channel||'dashboard-test'),0);
+    if(!token) return res.status(503).json({error:'Voice token service is not configured'});
+    res.json({ok:true,tokenReceived:true});
+  } catch(e) { res.status(502).json({error:e.message}); }
+});
+router.get('/voice', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
 router.get('/api/bots', (_req,res,next)=>{try{res.json({settings:bots.read(),geometry:bots.geometry()});}catch(e){next(e);}});
 router.put('/api/bots', express.json({limit:'8kb'}), (req,res)=>{try{res.json({ok:true,settings:bots.save(req.body)});}catch(e){res.status(400).json({error:e.message});}});
-router.get('/bots', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin','bots.html')));
-router.get('/characters', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin','characters.html')));
+router.get('/bots', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
+router.get('/characters', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
 router.get('/api/characters', (_req,res)=>res.json({characters:characters.list()}));
 router.put('/api/characters', express.json({limit:'32kb'}), (req,res)=>{
   try { res.json({ok:true,characters:characters.replace(req.body && req.body.characters)}); }
@@ -71,10 +145,17 @@ router.put('/api/players/:id/profile', express.json({ limit: '4kb' }), async (re
   } catch (error) { next(error); }
 });
 
+router.post('/api/grants/:target', express.json({ limit: '4kb' }), async (req, res, next) => {
+  try {
+    const result = await adminCore().grant(req.params.target, req.body || {});
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (error) { next(error); }
+});
+
 router.get('/api/capabilities', (_req, res) => res.json({
   live: ['online users', 'players in matches', 'active matches', 'match-server health', 'matchmaking queue'],
   players: ['lookup', 'nickname', 'role', 'kick', 'ban', 'unban'],
-  lobby: ['region', 'language', 'marquee messages', 'banner title', 'banner description', 'banner image', 'banner link'],
+  lobby: ['region', 'language', 'marquee messages', 'banner title', 'banner description', 'banner image', 'banner link', 'post-match feedback'],
   gameplay: ['Training Grounds availability', 'Clash Squad', 'custom rooms', 'bot count', 'bot difficulty', 'bot purchasing', 'bot cover', 'bot revive', 'bot gloo walls']
 }));
 const maxImageBytes = 8 * 1024 * 1024;
@@ -117,6 +198,7 @@ router.post('/api/cloudinary-upload', express.json({ limit: '12mb' }), async (re
   } catch (error) { return next(error); }
 });
 
-router.get('/', (_req, res) => res.sendFile(path.join(__dirname, '..', '..', 'public', 'admin', 'index.html')));
+router.use('/assets', express.static(path.join(__dirname, '..', '..', 'public', 'admin-app', 'assets'), { immutable: true, maxAge: '1y' }));
+router.get('*', (_req, res) => res.sendFile(path.join(__dirname, '..', '..', 'public', 'admin-app', 'index.html')));
 
 module.exports = router;

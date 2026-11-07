@@ -33,6 +33,16 @@ function createApp({ guests }) {
     next();
   });
 
+  // Keep the graph handoff observable. Older embedded SDKs vary the graph
+  // version/path, and a route mismatch otherwise surfaces only as a generic
+  // client-side "Login failed" message.
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      req.log.info({ status: res.statusCode, path: req.path }, 'connect request');
+    });
+    next();
+  });
+
   // Order matters: /health and /app/info/get are literal paths and must be
   // registered BEFORE the /:app_id catch-all inside graph routes.
   registerMiscRoutes(app);

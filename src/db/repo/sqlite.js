@@ -25,6 +25,22 @@ module.exports = {
       .all(`%${pattern}%`)
       .map((r) => r.account_id);
   },
+  async getTopAccounts(limit = 100) {
+    const ids = accounts.db.prepare('SELECT account_id FROM accounts ORDER BY level DESC, account_id ASC LIMIT ?')
+      .all(Math.max(1, Math.min(500, Number(limit) || 100))).map((row) => row.account_id);
+    return ids.map((id) => player.getById(id)).filter(Boolean)
+      .sort((a, b) => Number(b.ranking_points || 0) - Number(a.ranking_points || 0) || Number(a.uid) - Number(b.uid));
+  },
+  async getAllAccounts() {
+    const ids = accounts.db.prepare('SELECT account_id FROM accounts ORDER BY account_id').all()
+      .map((row) => row.account_id);
+    return ids.map((id) => player.getById(id)).filter(Boolean);
+  },
+  async getAccountsByClan(clanId) {
+    const ids = accounts.db.prepare('SELECT account_id FROM accounts WHERE clan_id=? ORDER BY account_id')
+      .all(Number(clanId)).map((row) => row.account_id);
+    return ids.map((id) => player.getById(id)).filter(Boolean);
+  },
   async createFromLogin(req) {
     return player.createFromLogin(req);
   },
@@ -46,6 +62,7 @@ module.exports = {
       if (account) {
         account.coins = Number(account.coins || 0) + (pr.coins | 0);
         account.exp = Number(account.exp || 0) + (pr.xp | 0);
+		account.ranking_points = Math.max(0, Number(account.ranking_points || 0) + (pr.rank_points | 0));
         account.match_count = Number(account.match_count || 0) + 1;
         account.win_count = Number(account.win_count || 0) + (pr.win ? 1 : 0);
         player.save(account);

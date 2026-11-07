@@ -17,6 +17,8 @@ function handleGetMailList(reqObj, ctx) {
     type: m.type || 0,
     title: m.title || '',
     content: m.content || '',
+    sender_info: m.sender_info || {},
+    attachment: m.attachment || {},
     receive_time: m.receive_time || 0,
     status: m.status || 0,
     source: m.source || 0,

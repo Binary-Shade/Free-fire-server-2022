@@ -19,6 +19,9 @@ const (
 	settleXPPerKill   = 10
 	settleWinXP       = 100
 	settleLoseXP      = 40
+	settleRankWin     = 20
+	settleRankLoss    = -10
+	settleRankPerKill = 2
 )
 
 // publishResult emits the durable match.result (per-player settlement) and match.ended
@@ -40,14 +43,19 @@ func (m *Match) publishResult() {
 			coins += settleWinCoins
 			xp = kills*settleXPPerKill + settleWinXP
 		}
+		rankPoints := kills*settleRankPerKill + settleRankLoss
+		if win {
+			rankPoints = kills*settleRankPerKill + settleRankWin
+		}
 		players = append(players, &pb.PlayerResult{
-			AccountId: int64(p.player.AccountID),
-			Coins:     coins,
-			Kills:     kills,
-			Deaths:    int32(m.deaths[p.entityID]),
-			Win:       win,
-			Xp:        xp,
-			Damage:    int32(m.damage[p.entityID]),
+			AccountId:  int64(p.player.AccountID),
+			Coins:      coins,
+			Kills:      kills,
+			Deaths:     int32(m.deaths[p.entityID]),
+			Win:        win,
+			Xp:         xp,
+			Damage:     int32(m.damage[p.entityID]),
+			RankPoints: rankPoints,
 		})
 	}
 	eventBus.Publish("match.result", &pb.MatchResult{MatchId: matchID, Players: players})

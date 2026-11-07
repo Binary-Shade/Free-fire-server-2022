@@ -109,18 +109,18 @@ $started += Start-LanProcess 'chat' $node @('src\servers\chat.js') ($common + @{
   CHAT_PORT = '10200'; NODE_ID = 'lan-chat'
 })
 $started += Start-LanProcess 'matchmaker' $node @('src\servers\matchmaker.js') ($common + @{
-  NODE_ID = 'lan-matchmaker'; MM_MIN_PLAYERS = '2'; MM_TIMEOUT_MS = '3000'
+  NODE_ID = 'lan-matchmaker'; MM_MIN_PLAYERS = '2'; MM_TIMEOUT_MS = '3000'; MM_BOT_FILL = '1'
 })
 $started += Start-LanProcess 'settlement' $node @('src\servers\settlement.js') ($common + @{
   NODE_ID = 'lan-settlement'
 })
 $started += Start-LanProcess 'match-server' $matchServer @('-addr', ':10100') ($common + @{
-  NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '0'; MATCH_NO_ZONE = '0'
+  NODE_ID = 'lan-match'; MATCH_ADVERTISE = "${LanAddress}:10100"; MATCH_BOT = '1'; MATCH_NO_ZONE = '0'
 })
 if (-not $DirectClient) {
   # Intercept only known game hosts. Other phone traffic remains an opaque
   # tunnel, which avoids certificate failures in YouTube and unrelated apps.
-  $gameHosts = '^(privatefreefirebackend\.vercel\.app|loginbp\.samosasmobiles\.dpdns\.org|loginbp2\.samosasmobiles\.dpdns\.org|auth\.samosasmobiles\.dpdns\.org|g\.samosasmobiles\.dpdns\.org|100067\.msdk\.garena\.com|login\.barbosasmobile\.com|graph\.barbosasmobile\.com|connect\.barbosasmobile\.com|versionsc\.barbosasmobile\.com|client\.barbosasmobile\.com)(:[0-9]+)?$'
+  $gameHosts = '^(127\.0\.0\.1|localhost|10\.0\.2\.2|privatefreefirebackend\.vercel\.app|loginbp\.samosasmobiles\.dpdns\.org|loginbp2\.samosasmobiles\.dpdns\.org|auth\.samosasmobiles\.dpdns\.org|g\.samosasmobiles\.dpdns\.org|100067\.msdk\.garena\.com|www\.facebook\.com|m\.facebook\.com|login\.barbosasmobile\.com|graph\.barbosasmobile\.com|connect\.barbosasmobile\.com|versionsc\.barbosasmobile\.com|client\.barbosasmobile\.com)(:[0-9]+)?$'
   # Lazy upstream connection is required for retired hostnames such as
   # graph.barbosasmobile.com: decrypt and rewrite the request before mitmproxy
   # attempts DNS resolution for the original host.

@@ -1,12 +1,35 @@
 package main
 
 import (
+	"encoding/binary"
 	"net"
 	"testing"
 	"time"
 
 	"libmadoka/match-server/packet"
 )
+
+func TestParseAndApplyAckWindow(t *testing.T) {
+	payload := make([]byte, 6)
+	binary.LittleEndian.PutUint16(payload, 10)
+	binary.LittleEndian.PutUint32(payload[2:], 0b101) // 9 and 7 received; 8 still missing
+	ack, ok := parseAck(payload)
+	if !ok || ack.base != 10 || ack.bits != 0b101 {
+		t.Fatalf("unexpected ACK: %+v ok=%v", ack, ok)
+	}
+	w := &Writer{pending: map[uint16]*pendingPkt{7: {}, 8: {}, 9: {}, 10: {}}}
+	w.applyAck(ack)
+	if len(w.pending) != 1 || w.pending[8] == nil {
+		t.Fatalf("ACK window left unexpected pending set: %#v", w.pending)
+	}
+}
+
+func TestParseShortAckCompatibility(t *testing.T) {
+	ack, ok := parseAck([]byte{0x34, 0x12})
+	if !ok || ack.base != 0x1234 || ack.bits != 0 {
+		t.Fatalf("unexpected short ACK: %+v ok=%v", ack, ok)
+	}
+}
 
 // TestWriterRetransmit exercises the RUDP reliability: a reliable (so=2) send is buffered
 // and resent while un-ACKed, and an ACK stops the retransmits.
@@ -60,7 +83,7 @@ func TestWriterRetransmit(t *testing.T) {
 	}
 
 	// ACK it -> no further retransmits.
-	w.onAck(seq)
+	w.onAck(seq, 0)
 	if p, ok := readOne(rudpRTO + 300*time.Millisecond); ok {
 		t.Fatalf("got a retransmit (seq=%d) after ACK", p.SeqID)
 	}

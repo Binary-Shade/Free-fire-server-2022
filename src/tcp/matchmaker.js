@@ -34,6 +34,7 @@ const characters = require('../../config/character-settings');
 
 const MIN_PLAYERS = Number(process.env.MM_MIN_PLAYERS || 2);    // form a match at N players...
 const TIMEOUT_MS = Number(process.env.MM_TIMEOUT_MS || 10000);  // ...or after this wait
+const BOT_FILL = process.env.MM_BOT_FILL === '1';               // permit timed-out solo CS matches; realtime fills the enemy team
 const TICK_MS = Number(process.env.MM_TICK_MS || 1000);         // service poll period (Redis-backed queue)
 const MATCH_SIZE = Number(process.env.MM_MATCH_SIZE || 50);     // cap players per formed match (floods)
 const LEASE_MS = Number(process.env.MM_LEASE_MS || 15000);      // leader lease TTL (failover time upper-bound)
@@ -223,8 +224,9 @@ async function tick() {
       const clashSquad = gameMode === 15;
       const enough = training || entries.length >= MIN_PLAYERS;
       const timedOut = entries.some((e) => now - e.joinedAt >= TIMEOUT_MS);
-      // CS stays queued until enough real players are present; timeout never creates a solo bot match.
-      if (enough || (!clashSquad && timedOut)) {
+      // Prefer real players. When explicitly enabled, a timed-out CS party may form a
+      // solo match and the realtime service will fill the opposing team with bots.
+      if (enough || (timedOut && (!clashSquad || BOT_FILL))) {
         const selected = require('./party-match').selectParties(entries, Number(entries[0].mode.game_mode) === 15 ? Math.min(8, MATCH_SIZE) : MATCH_SIZE);
         if (selected.length) await formMatch(selected);
       }

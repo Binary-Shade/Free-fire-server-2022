@@ -2,8 +2,9 @@
 
 const { escapeHtml } = require('./_util');
 
-module.exports = function renderLocalLoginPage({ pairId, username = '', error = '' }) {
+module.exports = function renderLocalLoginPage({ pairId, oauthState = '', username = '', error = '' }) {
   const pair = escapeHtml(pairId || '');
+  const state = escapeHtml(oauthState || '');
   const user = escapeHtml(username || '');
   const problem = error ? `<div class="error" role="alert">${escapeHtml(error)}</div>` : '';
   return `<!doctype html>
@@ -39,6 +40,7 @@ module.exports = function renderLocalLoginPage({ pairId, username = '', error = 
     ${problem}
     <form method="post" action="/local/session">
       <input type="hidden" name="pair_id" value="${pair}">
+      <input type="hidden" name="oauth_state" value="${state}">
       <label for="username">Username</label>
       <input id="username" name="username" value="${user}" minlength="3" maxlength="32"
         pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,31}" autocomplete="username" required>

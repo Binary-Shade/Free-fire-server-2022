@@ -501,13 +501,15 @@ module.exports = {
     "rate_app_switch_res": {
       "switch_desc": {
         "region": "IND",
-        "ios_open": true,
-        "gp_open": true,
-        "game_mode1": 1,
-        "rank1": 3,
-        "game_mode2": 15,
-        "rank2": 1,
-        "cd": 30
+        "ios_open": false,
+        "gp_open": false,
+        "huawei_open": false,
+        "xiaomi_open": false,
+        "game_mode1": 0,
+        "rank1": 0,
+        "game_mode2": 0,
+        "rank2": 0,
+        "cd": 0
       }
     },
     "live_desc_res": {

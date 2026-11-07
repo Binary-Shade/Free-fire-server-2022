@@ -9,10 +9,12 @@
 'use strict';
 
 const { requireAccount } = require('./_shared');
+const leaderboard = require('./_dailyLeaderboard');
 
-function handleGetTopNDailyLeaderboard(reqObj, ctx) {
-  if (!requireAccount(ctx)) return {};
-  return {}; // items: [], leaderboard_size: 0
+async function handleGetTopNDailyLeaderboard(reqObj, ctx) {
+  const account = requireAccount(ctx);
+  if (!account) return {};
+  return leaderboard.board(account.uid);
 }
 
 module.exports = {

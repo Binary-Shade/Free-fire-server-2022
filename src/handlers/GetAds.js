@@ -9,10 +9,13 @@
 'use strict';
 
 const { requireAccount } = require('./_shared');
+const loginDesc = require('./_loginDescData');
+const loginDescSettings = require('../../config/login-desc-settings');
 
 function handleGetAds(reqObj, ctx) {
   if (!requireAccount(ctx)) return {};
-  return {}; // advert_items: []
+  const configured = loginDescSettings.apply(loginDesc);
+  return configured.advert_res || { advert_items: [] };
 }
 
 module.exports = {

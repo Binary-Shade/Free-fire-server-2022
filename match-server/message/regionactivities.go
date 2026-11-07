@@ -45,11 +45,10 @@ func SyncRegionActivities(activities []string, styleA, styleB, styleC string, po
 	return w.B
 }
 
-// SyncRegionActivitiesDefault is the minimal "no events to sync" packet: an EMPTY activity list
-// (nothing to parse -> no switch, so no throw risk) + the "DEFAULT" region style + a zeroed
-// sub-message. Sent once per join so the client fires its dynamic-prefab visibility refresh and the
-// map's jump pads / invisible boxes appear. (If a map ever needs live region events, populate the
-// activity list instead.)
+// SyncRegionActivitiesDefault reproduces the captured 119-byte DEFAULT region
+// packet. The exact style URL is part of the reference payload; sending the old
+// placeholder produced a different packet and left Training dynamic prefabs,
+// including the weapon catalogue box, unavailable on this client.
 func SyncRegionActivitiesDefault() []byte {
-	return SyncRegionActivities([]string{"DEFAULT"}, "https://foices.github.io/minhas_resources/irei_salvar_angola_dessa_crise.png", "", "", RegionActivityPool{})
+	return SyncRegionActivities([]string{"DEFAULT"}, "https://github.com/fistskinff-beep/pngforfflog/releases/download/ff/1782909567118.png", "", "", RegionActivityPool{})
 }

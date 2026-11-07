@@ -251,7 +251,7 @@ func (m *Match) killEntity(victim, killer uint32, bodyPart uint8) {
 	weapon, skin := m.resolveKillWeapon(killer)
 	m.life[victim] = lifeDead
 	m.hp[victim] = 0
-	pendingRevive := m.sessionByEntity(victim) != nil
+	pendingRevive := m.sessionByEntity(victim) != nil && !m.battleRoyale
 	var observe uint32
 	if pendingRevive {
 		observe = m.spectateFor(victim)
@@ -358,10 +358,13 @@ func (m *Match) stepKnock(now time.Time) {
 // reviveAll resets every roster human + the bot to full HP + ALIVE and clears all knocks — the
 // round-transition wipe, so a new round starts everyone up. Clears roundOver so damage resumes.
 func (m *Match) reviveAll() {
+	now := time.Now().UnixNano()
 	for _, p := range m.players {
 		m.life[p.entityID] = lifeAlive
 		m.hp[p.entityID] = m.settings.maxHP
 		p.observing = 0 // back alive -> no longer spectating (clears OB_COUNT + the relays)
+		p.afkEliminated = false
+		p.lastAction.Store(now) // each round receives a fresh AFK window
 	}
 	for i, b := range m.bots {
 		m.life[b.entityID] = lifeAlive

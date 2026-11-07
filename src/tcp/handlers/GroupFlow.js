@@ -156,8 +156,11 @@ const routes = [
       if (group.state !== 0) { ctx.ret = EGroupErr.ALREADYINMATCHMAKING; return {}; }
       if (group.members.some((m, index) => index > 0 && !m.ready)) { ctx.ret = EGroupErr.GROUPNOTREADY; return {}; }
       group.state = 1;
-      const mode = { map_id: Number(group.map_ids[0]) || 1, game_mode: Number(group.game_mode) || 15,
+      let mode = { map_id: Number(group.map_ids[0]) || 1, game_mode: Number(group.game_mode) || 15,
         match_mode: Number(group.match_mode) || 1, difficulty: Number(group.difficulty) || 0 };
+      if (Number(mode.game_mode) !== 15 && Number(mode.game_mode) !== 23) {
+        mode = { map_id: 1, game_mode: 15, match_mode: 1, difficulty: 0 };
+      }
       const ids = group.members.map(m => Number(m.account_id));
       const accounts = ids.map(id => group.accounts.get(id));
       const ok = accounts.every(Boolean) && ids.every(id => ctx.gateway.isOnline(id)) &&

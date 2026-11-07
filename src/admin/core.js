@@ -147,6 +147,43 @@ class AdminCore {
     return { ok: true, uid, from, to: r };
   }
 
+  async grant(target, input = {}) {
+    const kind = String(input.kind || '').toLowerCase();
+    const amount = Number(input.amount);
+    const itemId = Number(input.itemId || 0);
+    if (!['gems', 'coins', 'item'].includes(kind)) return { ok: false, error: 'kind must be gems, coins, or item' };
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 100000000) return { ok: false, error: 'amount must be an integer from 1 to 100000000' };
+    if (kind === 'item' && (!Number.isSafeInteger(itemId) || itemId < 1)) return { ok: false, error: 'itemId is required for item grants' };
+    const all = String(target).toLowerCase() === 'all';
+    const accounts = all ? await this.repo.getAllAccounts() : [await this.repo.getById(Number(target))].filter(Boolean);
+    if (!accounts.length) return { ok: false, error: all ? 'no accounts found' : 'player not found' };
+    const grantId = String(input.grantId || `grant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`).slice(0, 100);
+    let applied = 0, skipped = 0;
+    for (const account of accounts) {
+      account.admin_grants = Array.isArray(account.admin_grants) ? account.admin_grants : [];
+      if (account.admin_grants.some((entry) => entry.id === grantId)) { skipped += 1; continue; }
+      if (kind === 'gems' || kind === 'coins') {
+        account[kind] = Number(account[kind] || 0) + amount;
+        account.wallet = account.wallet || {};
+        account.wallet[kind] = account[kind];
+      } else {
+        account.backpack = account.backpack || { items: [] };
+        account.backpack.items = Array.isArray(account.backpack.items) ? account.backpack.items : [];
+        const existing = account.backpack.items.find((item) => Number(item.id) === itemId);
+        if (existing) existing.cnt = Number(existing.cnt || 0) + amount;
+        else account.backpack.items.push({ id: itemId, cnt: amount, expire_time: 0, left_use_times: -1, history_owned_cnt: amount, item_status: 1 });
+      }
+      account.admin_grants.push({ id: grantId, kind, amount, itemId: kind === 'item' ? itemId : 0, at: Date.now() });
+      if (account.admin_grants.length > 100) account.admin_grants = account.admin_grants.slice(-100);
+      await this.repo.save(account);
+      this._publishUpdated(account.uid);
+      applied += 1;
+    }
+    const result = { ok: true, grantId, target: all ? 'all' : Number(target), kind, amount, itemId: kind === 'item' ? itemId : 0, applied, skipped };
+    await this.audit('grant', all ? null : Number(target), result);
+    return result;
+  }
+
   async kick(id, reason) {
     const uid = Number(id);
     if (!uid) return { ok: false, error: 'invalid id' };

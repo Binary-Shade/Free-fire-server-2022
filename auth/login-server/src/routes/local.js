@@ -19,6 +19,7 @@ module.exports = function registerLocalRoutes(app, { guests, accounts, pairings 
 
   app.post('/local/session', rateLimit, asyncHandler(async (req, res) => {
     const pairId = typeof req.body.pair_id === 'string' ? req.body.pair_id : '';
+    const oauthState = typeof req.body.oauth_state === 'string' ? req.body.oauth_state : '';
     const action = typeof req.body.action === 'string' ? req.body.action : '';
     const username = typeof req.body.username === 'string' ? req.body.username : '';
     const password = typeof req.body.password === 'string' ? req.body.password : '';
@@ -34,6 +35,7 @@ module.exports = function registerLocalRoutes(app, { guests, accounts, pairings 
       username,
       password,
       redirectUri: pairing.redirect_uri,
+      oauthState,
       ip: req.ip,
       guests,
       accounts,
@@ -41,7 +43,7 @@ module.exports = function registerLocalRoutes(app, { guests, accounts, pairings 
     });
     if (!flow.ok) {
       return res.status(flow.reason === 'renovation' ? 403 : 400).type('html').send(
-        renderLocalLoginPage({ pairId, username, error: MESSAGES[flow.reason] || 'Sign-in failed.' })
+        renderLocalLoginPage({ pairId, oauthState, username, error: MESSAGES[flow.reason] || 'Sign-in failed.' })
       );
     }
 

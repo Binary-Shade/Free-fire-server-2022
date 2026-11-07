@@ -6,9 +6,11 @@
  */
 
 'use strict';
+const loginDesc = require('./_loginDescData');
+const loginDescSettings = require('../../config/login-desc-settings');
 
 function handler() {
-  return { advert_items: [] };
+  return loginDescSettings.apply(loginDesc).advert_res || { advert_items: [] };
 }
 
 module.exports = {

@@ -89,6 +89,23 @@ class PostgresRepo {
     return rows.map((r) => Number(r.account_id));
   }
 
+  async getTopAccounts(limit = 100) {
+    const safe = Math.max(1, Math.min(500, Number(limit) || 100));
+    const { rows } = await this.pool.query('SELECT * FROM accounts ORDER BY level DESC, account_id ASC LIMIT $1', [safe]);
+    return rows.map(rowToAccount)
+      .sort((a, b) => Number(b.ranking_points || 0) - Number(a.ranking_points || 0) || Number(a.uid) - Number(b.uid));
+  }
+
+  async getAllAccounts() {
+    const { rows } = await this.pool.query('SELECT * FROM accounts ORDER BY account_id');
+    return rows.map(rowToAccount);
+  }
+
+  async getAccountsByClan(clanId) {
+    const { rows } = await this.pool.query('SELECT * FROM accounts WHERE clan_id=$1 ORDER BY account_id', [Number(clanId)]);
+    return rows.map(rowToAccount);
+  }
+
   async save(account) {
     if (!account) return account;
     const accountId = account.uid || account.account_id;
@@ -184,16 +201,20 @@ class PostgresRepo {
           pr.damage | 0, !!pr.win, pr.rank_points | 0, pr.xp | 0, Date.now()]
       );
       const fresh = ins.rows.length === 1; // 0 rows on conflict = already settled
-      let credited = false;
-      if (fresh && (pr.coins | 0) > 0) {
+	  let credited = false;
+	  if (fresh) {
         await client.query(
           `UPDATE accounts
-              SET state = jsonb_set(COALESCE(state, '{}'::jsonb), '{coins}',
-                          to_jsonb(COALESCE((state->>'coins')::bigint, 0) + $2::bigint))
+			  SET state = jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(COALESCE(state, '{}'::jsonb),
+				  '{coins}', to_jsonb(COALESCE((state->>'coins')::bigint, 0) + $2::bigint)),
+				  '{exp}', to_jsonb(COALESCE((state->>'exp')::bigint, 0) + $3::bigint)),
+				  '{ranking_points}', to_jsonb(GREATEST(0, COALESCE((state->>'ranking_points')::bigint, 0) + $4::bigint))),
+				  '{match_count}', to_jsonb(COALESCE((state->>'match_count')::bigint, 0) + 1)),
+				  '{win_count}', to_jsonb(COALESCE((state->>'win_count')::bigint, 0) + $5::bigint))
             WHERE account_id = $1`,
-          [pr.account_id, pr.coins | 0]
+		  [pr.account_id, pr.coins | 0, pr.xp | 0, pr.rank_points | 0, pr.win ? 1 : 0]
         );
-        credited = true;
+		credited = (pr.coins | 0) > 0 || (pr.xp | 0) > 0 || (pr.rank_points | 0) !== 0;
       }
       await client.query('COMMIT');
       return { fresh, credited };

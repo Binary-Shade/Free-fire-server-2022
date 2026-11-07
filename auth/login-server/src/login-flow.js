@@ -21,7 +21,7 @@ const GRANTED_SCOPES = 'user_friends%2Cemail%2Copenid%2Cpublic_profile%2Cbasic_i
 // Original data_access_expiration_time was create_time + 5183716 (~60 days).
 const DATA_ACCESS_OFFSET_SECONDS = 5_183_716;
 
-async function finishLogin({ user, redirectUri, ip, guests }) {
+async function finishLogin({ user, redirectUri, oauthState = '', ip, guests }) {
   const now = nowSeconds();
   const tokenSet = await issueTokens(guests, user.open_id, { ip, now });
   const signedRequest = buildSignedRequest({
@@ -38,7 +38,8 @@ async function finishLogin({ user, redirectUri, ip, guests }) {
     `&signed_request=${signedRequest}` +
     `&access_token=${tokenSet.access_token}` +
     `&data_access_expiration_time=${dataAccessExpiry}` +
-    `&expires_in=1296000`;
+    `&expires_in=1296000` +
+    (oauthState ? `&state=${encodeURIComponent(oauthState)}` : '');
   return { ok: true, redirectUrl, uid: user.uid, openId: user.open_id };
 }
 
@@ -138,7 +139,7 @@ async function completeDiscordLogin({ discordUser, redirectUri, ip, guests, acco
   return finishLogin({ user, redirectUri, ip, guests });
 }
 
-async function completeLocalLogin({ action, username, password, redirectUri, ip, guests, accounts, log }) {
+async function completeLocalLogin({ action, username, password, redirectUri, oauthState = '', ip, guests, accounts, log }) {
   const flowLog = log || logger;
   const checked = validateCredentials(username, password);
   if (!checked.ok) return checked;
@@ -234,7 +235,7 @@ async function completeLocalLogin({ action, username, password, redirectUri, ip,
     });
     flowLog.warn({ uid: user.uid }, 'repaired missing local auth account');
   }
-  return finishLogin({ user, redirectUri, ip, guests });
+  return finishLogin({ user, redirectUri, oauthState, ip, guests });
 }
 
 module.exports = { completeDiscordLogin, completeLocalLogin, finishLogin };

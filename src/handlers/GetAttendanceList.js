@@ -23,9 +23,12 @@ const REF_ATTENDANCE = [
 function handleGetAttendanceList(reqObj, ctx) {
   const account = requireAccount(ctx);
   if (!account) return {};
+  const cycle = account.attendance && account.attendance.config_id === 1 ? account.attendance : { claimed_days: [], last_date: '' };
+  const claimed = new Set(Array.isArray(cycle.claimed_days) ? cycle.claimed_days.map(Number) : []);
+  const today = new Date().toISOString().slice(0, 10);
   const attendance = REF_ATTENDANCE.map((r) => ({
     id: r.day,
-    signed: 0,
+    signed: claimed.has(r.day) ? 1 : 0,
     awards: [{ award_id: r.reward_id, award_num: r.reward_amount }],
     is_big_prize: r.day === 7
   }));
@@ -36,7 +39,7 @@ function handleGetAttendanceList(reqObj, ctx) {
         end_time: 1762536000,
         url: '',
         loc_key: 'Attendance',
-        is_signed_today: false,
+        is_signed_today: cycle.last_date === today,
         start_time: 0,
         attendance_config_id: 1
       }
@@ -48,5 +51,6 @@ module.exports = {
   endpoint: 'GetAttendanceList',
   reqType: null,
   resType: 'CSGetAttendanceListRes',
-  handler: handleGetAttendanceList
+  handler: handleGetAttendanceList,
+  REF_ATTENDANCE
 };

@@ -19,7 +19,10 @@ function buildSignedRequest({ uid, accessToken, appId, appSecret, issuedAt }) {
   const payload = {
     algorithm: 'HMAC-SHA256',
     issued_at: issuedAt,
-    user_id: uid,
+    // Facebook's Android SDK calls JSONObject.getString("user_id"). Android's
+    // org.json implementation rejects a JSON number here instead of coercing
+    // it, so preserve the identifier as a string exactly as Facebook does.
+    user_id: String(uid),
     code: accessToken,
     app_id: appId,
     page: { id: null, admin: false, liked: false },

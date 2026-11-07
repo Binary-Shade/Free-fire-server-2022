@@ -120,6 +120,20 @@ const (
 	CmdClientPos             = 1001 // client -> server: per-tick position/state update (carries the local player's world pos)
 	CmdClientPosV2           = 1012 // server -> client: UDP_PLAYER_STATE_SYNC_V2 — the remote-movement broadcast 1.70.1 actually applies (1001 downstream is ignored on this build)
 	CmdInGameChat            = 1030 // server -> client: apparently sends a chat message? unsure
+	CmdTrainingInit          = 301
+	CmdTrainingExit          = 315
+	CmdTrainingCatalog       = 316
+	CmdTrainingItemGranted   = 317
+	CmdTrainingSelectItem    = 318
+	CmdTrainingStatus        = 319
+	CmdTrainingRespawn       = 322
+	CmdTrainingShowShop      = 323
+	CmdTrainingBuySuccess    = 324
+	CmdTrainingCatalogReq    = 326
+	CmdTrainingIntoPortal    = 330
+	CmdTrainingEnterShop     = 334
+	CmdTrainingWorldReady    = 253
+	CmdTrainingReady         = 587
 )
 
 var (

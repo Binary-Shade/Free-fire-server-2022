@@ -10,8 +10,17 @@ foreach ($entry in $entries) {
   $process = Get-Process -Id ([int]$entry.Id) -ErrorAction SilentlyContinue
   if ($process) {
     $sameName = $entry.ProcessName -and $process.ProcessName -eq $entry.ProcessName
-    $sameStart = $entry.StartTimeUtc -and
-      $process.StartTime.ToUniversalTime().ToString('o') -eq $entry.StartTimeUtc
+    $sameStart = $false
+    if ($entry.StartTimeUtc) {
+      try {
+        $started = $process.StartTime
+        if ($null -ne $started) {
+          $sameStart = $started.ToUniversalTime().ToString('o') -eq $entry.StartTimeUtc
+        }
+      } catch {
+        Write-Warning "Could not verify start time for PID $($entry.Id): $($_.Exception.Message)"
+      }
+    }
     if ($sameName -and $sameStart) {
       Stop-Process -Id $process.Id
       Write-Host "Stopped $($entry.Name) (PID $($process.Id))"

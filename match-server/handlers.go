@@ -13,10 +13,18 @@ import (
 // done by dispatch; route runs either inline (pre-match) or on run()'s goroutine (via the mailbox).
 // Each case is a thin delegate — the actual work lives in the handleXxx methods below.
 func (s *session) route(p *packet.Packet) {
+	// Training interactions travel over the encrypted realtime UDP connection,
+	// outside the HTTP proxy. Keep a focused decoded trace so controlled client
+	// captures reveal the command and RUDP send-option/channel used by each UI
+	// action without logging high-rate movement and replication traffic.
+	if s.match != nil && s.match.training && p.Cmd >= 300 && p.Cmd < 400 {
+		log.Printf("[training-trace] C2S cmd=%d so=%d seq=%d order=%d flags=%d len=%d payload=%x",
+			p.Cmd, p.SendOption, p.SeqID, p.OrderID, p.Flags, len(p.Payload), p.Payload)
+	}
 	switch p.Cmd {
 	case packet.CmdHello, packet.CmdReconnect: // 1 / 5
 		s.handleHello(p)
-	case packet.CmdAck: // 2 — client's ACK of our reliable packets; stub does not resend.
+	case packet.CmdAck: // 2 — consumed by dispatch before routing (writer ACK window).
 	case packet.CmdPing: // 3
 		s.handlePing(p)
 	case packet.CmdJoinMatchPrepare: // 439 — buffers the (bigger) prepare_token chunk
@@ -65,6 +73,8 @@ func (s *session) route(p *packet.Packet) {
 		s.handleStopActiveSkill(p)
 	case packet.CmdEmote: // 369 — play emote: relay the animation to others
 		s.handleEmote(p)
+	case packet.CmdInGameChat: // 1030 — match text/quick-chat relay
+		s.handleInGameChat(p)
 	case packet.CmdBattleFlagReq: // 276 — client planted a flag-emote flag: spawn/replace the named world object
 		s.handleBattleFlagReq(p)
 	case packet.CmdEquipAttachment: // 122 — client's manual attachment equip (server auto-maxes)
@@ -87,9 +97,31 @@ func (s *session) route(p *packet.Packet) {
 		s.handleManualZoneEnterExit(p)
 	case packet.CmdAddFakeTimesReq:
 		s.handleAddFakeTimes(p)
+	case packet.CmdTrainingInit:
+		s.handleTrainingInit(p)
+	case packet.CmdTrainingCatalogReq:
+		s.handleTrainingCatalogReq(p)
+	case packet.CmdTrainingIntoPortal, packet.CmdTrainingEnterShop:
+		s.handleTrainingTrigger(p)
+	case packet.CmdTrainingSelectItem:
+		s.handleTrainingSelectItem(p)
+	case packet.CmdTrainingRespawn:
+		s.handleTrainingRespawn(p)
+	case packet.CmdTrainingExit:
+		log.Printf("[mm-udp] cmd=315 Training exit/finalize (%dB): %x", len(p.Payload), p.Payload)
 	default:
 		s.handleUnknown(p)
 	}
+}
+
+// handleInGameChat preserves the client encoded body and fans it to the other
+// participants. The sender already renders its own message locally.
+func (s *session) handleInGameChat(p *packet.Packet) {
+	if s.match == nil || len(p.Payload) == 0 || len(p.Payload) > 4096 {
+		return
+	}
+	s.match.broadcastToOthers(s, packet.CmdInGameChat, append([]byte(nil), p.Payload...))
+	log.Printf("[mm-udp] in-game chat uid=%d bytes=%d", s.player.AccountID, len(p.Payload))
 }
 
 // handleHello answers HELLO / reconnect with S2C_Hello_Res. A cmd 5 reconnect is a
@@ -109,7 +141,7 @@ func (s *session) handleHello(p *packet.Packet) {
 		matchManager.register(m)
 		m.setupMatch(s) // arena / roster / round / bot — no re-join packets (client is already in-match)
 		log.Printf("[mm-udp] reconnect mid-match -> solo resume (no re-join) %v", s.remote)
-		s.startCSMatch()
+		s.startMatchLoop()
 		s.enqueue(s.resyncWalls) // redraw lost gloo walls on run()'s goroutine (cmd 220)
 	}
 }

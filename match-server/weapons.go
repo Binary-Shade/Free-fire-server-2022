@@ -5,6 +5,8 @@ import (
 	"encoding/csv"
 	"io"
 	"log"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -27,6 +29,9 @@ import (
 //go:embed weapondata/WeaponTable.csv
 var weaponTableCSV []byte
 
+//go:embed weapondata/WeaponSkin.csv
+var weaponSkinCSV []byte
+
 // WeaponTable.csv column indexes (0-based). Confirmed against the header row and
 // the USP data row (id 3 -> ammo_clip_size 12, ammo_id 202).
 const (
@@ -41,6 +46,7 @@ const (
 // WeaponSkin.csv column indexes (0-based).
 const (
 	wsColSkinID   = 0 // SkinID
+	wsColRegion   = 2 // region (`;` separated region codes)
 	wsColWeaponID = 4 // WeaponID (which weapon this skin belongs to)
 	wsColClipMod  = 6 // ammo_clip_size (per-skin magazine MODIFIER; often blank; may be negative)
 )
@@ -2394,12 +2400,22 @@ var skinToWeaponStatic = map[uint32]uint32{907000001: 3,
 
 func init() {
 	parseWeaponTable(weaponTableCSV)
-	buildWeaponSkinsMap()
+	region := strings.ToUpper(strings.TrimSpace(os.Getenv("DEFAULT_REGION")))
+	if region == "" {
+		region = "IND"
+	}
+	skinMap, clipMods := parseWeaponSkinTable(weaponSkinCSV, region)
+	skinClipMod = clipMods
+	buildWeaponSkinsMap(skinMap)
+	log.Printf("weapon skin catalog: region=%s unique_skins=%d clip_modifiers=%d", region, len(skinMap), len(clipMods))
 }
 
-func buildWeaponSkinsMap() {
-	for skinID, weaponID := range skinToWeaponStatic {
+func buildWeaponSkinsMap(skinMap map[uint32]uint32) {
+	for skinID, weaponID := range skinMap {
 		weaponSkins[weaponID] = append(weaponSkins[weaponID], skinID)
+	}
+	for weaponID := range weaponSkins {
+		sort.Slice(weaponSkins[weaponID], func(i, j int) bool { return weaponSkins[weaponID][i] < weaponSkins[weaponID][j] })
 	}
 
 	total := 0
@@ -2408,6 +2424,57 @@ func buildWeaponSkinsMap() {
 		total += len(skins)
 	}
 	log.Printf("Armas configuradas: %d com um total de %d skins", len(weaponSkins), total)
+}
+
+// parseWeaponSkinTable selects one regional row per SkinID. The source table
+// contains duplicate IDs with different regional stat columns (for example an
+// IND row followed by a blank BR row). Last-row-wins silently removed India's
+// magazine modifiers, so selection is explicit and deterministic here.
+func parseWeaponSkinTable(b []byte, preferredRegion string) (map[uint32]uint32, map[uint32]int) {
+	type selected struct {
+		priority int
+		weaponID uint32
+		clipMod  int
+	}
+	chosen := make(map[uint32]selected)
+	r := newCSVReader(b)
+	preferredRegion = strings.ToUpper(strings.TrimSpace(preferredRegion))
+	for row := 0; ; row++ {
+		rec, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil || row < 2 || len(rec) <= wsColClipMod {
+			continue
+		}
+		skinID, okSkin := parseU32(rec[wsColSkinID])
+		weaponID, okWeapon := parseU32(rec[wsColWeaponID])
+		if !okSkin || !okWeapon {
+			continue
+		}
+		regions := strings.Split(strings.ToUpper(strings.TrimSpace(rec[wsColRegion])), ";")
+		priority := 1
+		if regionValue := strings.ToUpper(strings.TrimSpace(rec[wsColRegion])); regionValue == "" || regionValue == "DEFAULT" {
+			priority = 2
+		}
+		for _, region := range regions {
+			if strings.TrimSpace(region) == preferredRegion {
+				priority = 3
+				break
+			}
+		}
+		clipMod, _ := parseInt(rec[wsColClipMod])
+		if current, exists := chosen[skinID]; !exists || priority > current.priority {
+			chosen[skinID] = selected{priority: priority, weaponID: weaponID, clipMod: clipMod}
+		}
+	}
+	skinMap := make(map[uint32]uint32, len(chosen))
+	clipMods := make(map[uint32]int, len(chosen))
+	for skinID, value := range chosen {
+		skinMap[skinID] = value.weaponID
+		clipMods[skinID] = value.clipMod
+	}
+	return skinMap, clipMods
 }
 
 // newCSVReader returns a csv.Reader tolerant of the tables' quirks: variable

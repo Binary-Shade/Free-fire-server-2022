@@ -9,6 +9,7 @@ process.env.DB_NAME = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { completeLocalLogin } = require('../login-server/src/login-flow');
+const { verifySignedRequest } = require('../shared/src/signed-request');
 
 function stores() {
   const users = [];
@@ -56,6 +57,7 @@ test('local registration and login issue client-compatible redirects', async () 
     username: 'Player.One',
     password: 'correct horse battery staple',
     redirectUri: 'fbconnect://success',
+    oauthState: '{"challenge":"abc"}',
     ip: '127.0.0.1',
     guests: s.guests,
     accounts: s.accountRepo,
@@ -66,6 +68,12 @@ test('local registration and login issue client-compatible redirects', async () 
   assert.equal(registered.ok, true);
   assert.match(registered.redirectUrl, /^fbconnect:\/\/success#/);
   assert.match(registered.redirectUrl, /access_token=/);
+  assert.match(registered.redirectUrl, /state=%7B%22challenge%22%3A%22abc%22%7D/);
+  const signedRequest = new URL(registered.redirectUrl).hash
+    .slice(1).split('&').map((part) => part.split('='))
+    .find(([key]) => key === 'signed_request')[1];
+  const signedPayload = verifySignedRequest(decodeURIComponent(signedRequest), process.env.APP_SECRET);
+  assert.equal(typeof signedPayload.user_id, 'string');
   assert.equal(s.users[0].local_username, 'player.one');
   assert.equal(s.users[0].password_hash.includes(common.password), false);
   assert.equal(s.accounts.length, 1);

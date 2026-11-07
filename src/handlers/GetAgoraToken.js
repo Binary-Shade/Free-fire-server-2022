@@ -7,14 +7,22 @@
  */
 
 'use strict';
+const voice = require('../../config/voice-settings');
 
-function emptyStub() {
-  return {};
+async function handler(req, ctx) {
+  const channel = String(req && req.channel_name || '').trim();
+  const uid = Number(ctx && ctx.account && ctx.account.uid);
+  if (!channel || channel.length > 128 || !Number.isFinite(uid)) return { token: '' };
+  try { return { token: await voice.issue(channel, uid) }; }
+  catch (error) {
+    ctx.logger.warn(`[voice] token issue failed uid=${uid}: ${error.message}`);
+    return { token: '' };
+  }
 }
 
 module.exports = {
   endpoint: 'GetAgoraToken',
-  reqType: 'Empty',
-  resType: 'Empty',
-  handler: emptyStub
+  reqType: 'CSGetAgoraTokenReq',
+  resType: 'CSGetAgoraTokenRes',
+  handler
 };

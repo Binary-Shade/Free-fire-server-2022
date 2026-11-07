@@ -6,12 +6,18 @@
  */
 
 'use strict';
+const { requireAccount } = require('./_shared');
 
 function handler(reqObj, ctx) {
+  const account = requireAccount(ctx);
+  const petId = Number(reqObj && reqObj.pet_id);
+  const name = String(reqObj && reqObj.name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 16);
+  const pet = account && Array.isArray(account.pets) && account.pets.find((entry) => Number(entry.id) === petId);
+  if (pet && name) { pet.name = name; ctx.savePlayer(); }
   ctx.logger.info(`[ported_1] RenamePet pet_id=${reqObj && reqObj.pet_id}`);
   return {
-    pet_id: (reqObj && reqObj.pet_id) || 0,
-    name: (reqObj && reqObj.name) || ''
+    pet_id: pet ? petId : 0,
+    name: pet ? String(pet.name || '') : ''
   };
 }
 

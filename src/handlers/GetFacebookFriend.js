@@ -7,10 +7,15 @@
  */
 
 'use strict';
+const { requireAccount } = require('./_shared');
+const platformFriends = require('./_platformFriends');
 
-function handleGetFacebookFriend(reqObj, ctx) {
-  ctx.logger.info('[ported_7] GetFacebookFriend -> default res');
-  return {};
+async function handleGetFacebookFriend(reqObj, ctx) {
+  const account = requireAccount(ctx);
+  if (!account) return {};
+  const friends = await platformFriends.profiles(account, 'facebook');
+  ctx.logger.info(`[platform] Facebook friends uid=${account.uid} count=${friends.length}`);
+  return { friends, star_friends: [], friends_alias_info: [] };
 }
 
 module.exports = {

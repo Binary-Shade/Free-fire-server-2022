@@ -54,6 +54,7 @@ module.exports = function registerDialogRoutes(app, { pairings }) {
   const handler = asyncHandler(async (req, res) => {
     const clientId = req.query.client_id;
     const redirectUriRaw = req.query.redirect_uri;
+    const oauthState = typeof req.query.state === 'string' ? req.query.state : '';
 
     // Hide the endpoint from casual scanners: without both parameters we
     // return the exact fake unavailability page the original server used.
@@ -79,7 +80,7 @@ module.exports = function registerDialogRoutes(app, { pairings }) {
     });
 
     if (config.AUTH_PROVIDER === 'local') {
-      return res.status(200).type('html').send(renderLocalLoginPage({ pairId }));
+      return res.status(200).type('html').send(renderLocalLoginPage({ pairId, oauthState }));
     }
 
     const state = signState(

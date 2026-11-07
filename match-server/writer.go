@@ -31,7 +31,7 @@ type Writer struct {
 	addr *net.UDPAddr
 	key  []byte
 	ch   chan outItem
-	acks chan uint16 // client ACKs (seq) routed here from the receive loop; drained by run()
+	acks chan ackFrame // client ACK windows routed here from the receive loop; drained by run()
 
 	// Owned SOLELY by run(): the reliable sequence counter (shared by hello + reliable data),
 	// the send_option=2 data order counter, and the un-ACKed reliable-send buffer. No mutex —
@@ -39,6 +39,13 @@ type Writer struct {
 	seq     uint16
 	order   uint16
 	pending map[uint16]*pendingPkt
+}
+
+// ackFrame is the rolling acknowledgement carried by cmd 2. Bit zero acknowledges
+// base-1, bit one base-2, and so on, allowing out-of-order delivery without needless resends.
+type ackFrame struct {
+	base uint16
+	bits uint32
 }
 
 // pendingPkt is an un-ACKed reliable send held for retransmit: the fully-framed wire bytes
@@ -66,7 +73,7 @@ func newWriter(conn *net.UDPConn, addr *net.UDPAddr, key []byte) *Writer {
 		addr:    addr,
 		key:     key,
 		ch:      make(chan outItem, 256),
-		acks:    make(chan uint16, 256),
+		acks:    make(chan ackFrame, 256),
 		pending: map[uint16]*pendingPkt{},
 	}
 	go w.run()
@@ -86,11 +93,11 @@ func (w *Writer) run() {
 				return
 			}
 			w.emit(it)
-		case seq := <-w.acks:
-			if p := w.pending[seq]; p != nil && strings.Contains(p.label, "active-skill") {
-				log.Printf("[mm-udp] skill ACK seq=%d peer=%v %s", seq, w.addr, p.label)
+		case ack := <-w.acks:
+			if p := w.pending[ack.base]; p != nil && strings.Contains(p.label, "active-skill") {
+				log.Printf("[mm-udp] skill ACK seq=%d peer=%v %s", ack.base, w.addr, p.label)
 			}
-			delete(w.pending, seq) // client confirmed this reliable seq — stop retransmitting it
+			w.applyAck(ack)
 		case now := <-t.C:
 			w.retransmit(now)
 		}
@@ -156,10 +163,19 @@ func (w *Writer) retransmit(now time.Time) {
 
 // onAck routes a client ACK (of one of our reliable seqs) to run(). Non-blocking: a full
 // buffer just delays the ACK, so the packet retransmits once more (harmless — client de-dupes).
-func (w *Writer) onAck(seq uint16) {
+func (w *Writer) onAck(base uint16, bits uint32) {
 	select {
-	case w.acks <- seq:
+	case w.acks <- ackFrame{base: base, bits: bits}:
 	default:
+	}
+}
+
+func (w *Writer) applyAck(ack ackFrame) {
+	delete(w.pending, ack.base)
+	for bit := uint(0); bit < 32; bit++ {
+		if ack.bits&(uint32(1)<<bit) != 0 {
+			delete(w.pending, ack.base-uint16(bit+1))
+		}
 	}
 }
 
@@ -200,9 +216,13 @@ func broadcast(wire []byte, outs []*Writer) {
 
 // parseAckSeq extracts the ACKed reliable seq from a client cmd-2 ACK payload
 // ([seq u16][ackBits u32], plaintext). Returns false if the payload is too short.
-func parseAckSeq(payload []byte) (uint16, bool) {
+func parseAck(payload []byte) (ackFrame, bool) {
 	if len(payload) < 2 {
-		return 0, false
+		return ackFrame{}, false
 	}
-	return binary.LittleEndian.Uint16(payload), true
+	a := ackFrame{base: binary.LittleEndian.Uint16(payload)}
+	if len(payload) >= 6 {
+		a.bits = binary.LittleEndian.Uint32(payload[2:6])
+	}
+	return a, true
 }

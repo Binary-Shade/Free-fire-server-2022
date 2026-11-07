@@ -45,8 +45,10 @@ type session struct {
 	// disconnectTimeout is flagged, and if it doesn't reconnect within reconnectGrace its frozen pawn is
 	// removed so the round can resolve and others stop seeing it stuck outside the zone.
 	lastSeen       atomic.Int64
+	lastAction     atomic.Int64 // last gameplay input; transport pings/ACKs do not keep an AFK pawn alive
 	disconnected   bool
 	disconnectedAt time.Time
+	afkEliminated  bool
 
 	// Allocated per-participant ids (Step 4b, via Match.allocSlot): entity id = team<<24 | slot,
 	// PRI RepID, CS faction, team (the entity hibyte), and roster slot. For the first human these
@@ -135,6 +137,7 @@ type session struct {
 	manualChallenges  map[uint32]uint32
 	manualZones       map[uint32]bool
 	fakeTimes         uint32
+	trainingTriggers  map[uint64]bool
 
 	// Shop-mushroom EP (energy): buying a mushroom grants EP; stepEP drains it back into HP over
 	// time. mushrooms counts buys this round (capped at mushroomsPerRound); both reset each round.

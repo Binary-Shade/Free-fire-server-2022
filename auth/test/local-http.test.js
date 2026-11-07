@@ -61,22 +61,25 @@ test('local WebView flow registers without contacting Discord', async (t) => {
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  const dialog = await fetch(`${base}/dialog/oauth?client_id=100067&redirect_uri=${encodeURIComponent('fbconnect://success')}`);
+  const clientState = '{"0_auth_logger_id":"test-state"}';
+  const dialog = await fetch(`${base}/dialog/oauth?client_id=100067&redirect_uri=${encodeURIComponent('fbconnect://success')}&state=${encodeURIComponent(clientState)}`);
   const page = await dialog.text();
   assert.equal(dialog.status, 200);
   assert.match(page, /action="\/local\/session"/);
   assert.doesNotMatch(page, /discord\.com/i);
   const pairId = page.match(/name="pair_id" value="([^"]+)"/)[1];
+  assert.match(page, /name="oauth_state"/);
 
   const password = 'correct horse battery staple';
   const response = await fetch(`${base}/local/session`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ pair_id: pairId, action: 'register', username: 'LocalPlayer', password }),
+    body: new URLSearchParams({ pair_id: pairId, oauth_state: clientState, action: 'register', username: 'LocalPlayer', password }),
   });
   const body = await response.text();
   assert.equal(response.status, 200);
   assert.match(body, /fbconnect:\/\/success/);
+  assert.match(body, /state=%7B%220_auth_logger_id%22%3A%22test-state%22%7D/);
   assert.doesNotMatch(body, new RegExp(password));
   assert.equal(repos.users.length, 1);
 });

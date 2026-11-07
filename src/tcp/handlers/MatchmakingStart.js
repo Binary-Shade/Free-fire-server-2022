@@ -14,12 +14,19 @@ const { EProtocol, EMatchmaking } = require('../protocol');
 const matchmaker = require('../matchmaker');
 
 function handler(reqObj, ctx) {
-  const mode = {
+  let mode = {
     map_id: (Array.isArray(reqObj.map_ids) && reqObj.map_ids[0]) || 1,
     game_mode: reqObj.game_mode || 15,
     match_mode: reqObj.match_mode || 1,
-    difficulty: reqObj.difficulty || 0
+    difficulty: reqObj.difficulty || 0,
   };
+  // This client build needs a separate BR pregame/plane protocol that the
+  // realtime service does not implement yet. Reject stale BR selections left
+  // in client state instead of loading them at Clash Squad spawn coordinates.
+  if (Number(mode.game_mode) !== 15 && Number(mode.game_mode) !== 23) {
+    ctx.logger.warn(`[tcp] unsupported matchmaking mode=${mode.game_mode} map=${mode.map_id}; using Clash Squad`);
+    mode = { map_id: 1, game_mode: 15, match_mode: 1, difficulty: 0 };
+  }
   matchmaker.enqueue(ctx.account, ctx.gateway, mode);
   ctx.logger.info(
     `[tcp] MatchmakingStart uid=${ctx.account.uid} game_mode=${mode.game_mode} map=${mode.map_id} ` +

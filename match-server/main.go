@@ -186,9 +186,9 @@ func (s *session) dispatch(p *packet.Packet) {
 		}
 	}()
 	s.lastSeen.Store(time.Now().UnixNano()) // heard from the client — feeds the disconnect sweep (sweepDisconnects)
-	if p.Cmd == packet.CmdAck { // the client ACKing one of OUR reliable sends -> stop retransmitting it
-		if seq, ok := parseAckSeq(p.Payload); ok {
-			s.out.onAck(seq)
+	if p.Cmd == packet.CmdAck {             // the client ACKing one of OUR reliable sends -> stop retransmitting it
+		if ack, ok := parseAck(p.Payload); ok {
+			s.out.onAck(ack.base, ack.bits)
 		}
 		return
 	}
@@ -198,6 +198,9 @@ func (s *session) dispatch(p *packet.Packet) {
 	if p.Cmd == packet.CmdPing { // stateless echo — keep it prompt, don't inflate the client's ping
 		s.handlePing(p)
 		return
+	}
+	if p.Cmd != packet.CmdHello && p.Cmd != packet.CmdReconnect {
+		s.lastAction.Store(time.Now().UnixNano())
 	}
 	if s.syncStarted { // the match loop owns the state — process the handler on its goroutine
 		s.enqueue(func() { s.route(p) })

@@ -46,7 +46,12 @@ async function handler(reqObj, ctx) {
     return p;
   });
   ctx.logger.info(`[ported] GetFriend uid=${account.uid} -> ${friends.length} friends (${onlineSet.size} online)`);
-  return { friends, star_friends: [], friends_alias_info: [] };
+  const aliases = account.friend_aliases && typeof account.friend_aliases === 'object'
+    ? Object.entries(account.friend_aliases)
+      .filter(([id, alias]) => ids.includes(Number(id)) && String(alias).trim())
+      .map(([id, alias]) => ({ account_id: Number(id), alias: String(alias).slice(0, 24) }))
+    : [];
+  return { friends, star_friends: [], friends_alias_info: aliases };
 }
 
 module.exports = {

@@ -1,63 +1,61 @@
-/**
- * PurchaseGacha (CSLotteryReq -> CSLotteryRes)
- *
- * reference handle_PurchaseGacha @ htpp.py:6140 — draw random items (x1 or x10)
- * and return them as lottery_goods. We drop the Lucky/items.json tables and use
- * a simple uniform draw over a small pool.
- */
-
 'use strict';
+const crypto = require('crypto');
+const { requireAccount, nowSecs } = require('./_shared');
+const luckRoyale = require('../../config/luck-royale');
+const AWARD_ITEM = 1;
 
-const { requireAccount, randInt } = require('./_shared');
-
-// AwardType.ITEM in the reference gacha responses (origin/dest award type = 1).
-const AWARD_TYPE_ITEM = 1;
-
-// Small item pool for the gacha draw (faithful to the reference's "random item"
-// behaviour without the 1.43 items.json / Lucky tables).
-const GACHA_POOL = [
-  211000000, 203000001, 204000001, 205000001, 203000166,
-  203000092, 902000062, 901000036, 907000010, 102000005
-];
-const GACHA_LEGENDARY = 102000005;
-
-function handlePurchaseGacha(reqObj, ctx) {
-  const account = requireAccount(ctx);
-  if (!account) return {};
-
-  // gacha_type === 2 indicates a x10 pull (reference checks several aliases).
-  const itemCount = Number(reqObj.gacha_type) === 2 ? 10 : 1;
-
-  const wonItems = [];
-  for (let i = 0; i < itemCount; i += 1) {
-    wonItems.push(GACHA_POOL[randInt(GACHA_POOL.length)]);
-  }
-  const hasBigReward = wonItems.includes(GACHA_LEGENDARY);
-
-  const lotteryGoods = wonItems.map((itemId) => ({
-    origin_award_type: AWARD_TYPE_ITEM,
-    origin_award_id: itemId,
-    origin_award_num: 1,
-    dest_award_type: AWARD_TYPE_ITEM,
-    dest_award_id: itemId,
-    dest_award_num: 1
-  }));
-
-  return {
-    lottery_goods: lotteryGoods,
-    lottery_count_weekly: 1,
-    next_free_time: 0,
-    limit_purchase_count_one: 999,
-    limit_purchase_count_ten: 999,
-    not_got_num: 0,
-    first_draw_reward_num: 0,
-    has_big_reward: hasBigReward
-  };
+function addItem(account, id, count) {
+  account.backpack = account.backpack || { items: [] };
+  account.backpack.items = Array.isArray(account.backpack.items) ? account.backpack.items : [];
+  const item = account.backpack.items.find((x) => Number(x.id) === id);
+  if (item) item.cnt = Number(item.cnt || 0) + count;
+  else account.backpack.items.push({ id, cnt: count });
 }
+function owns(account, id) { return !!(account.backpack && Array.isArray(account.backpack.items) && account.backpack.items.some((x) => Number(x.id) === id && Number(x.cnt || 0) > 0)); }
+function weighted(pool) { let n = crypto.randomInt(pool.reduce((s, x) => s + x.weight, 0)); for (const x of pool) { if (n < x.weight) return x; n -= x.weight; } return pool[pool.length - 1]; }
+function exchanged(origin, destId, destNum) { return { origin_award_type:AWARD_ITEM, origin_award_id:origin.itemId, origin_award_num:origin.quantity, dest_award_type:AWARD_ITEM, dest_award_id:destId, dest_award_num:destNum }; }
 
-module.exports = {
-  endpoint: 'PurchaseGacha',
-  reqType: 'CSLotteryReq',
-  resType: 'CSLotteryRes',
-  handler: handlePurchaseGacha
-};
+function handler(req, ctx) {
+  const account = requireAccount(ctx); if (!account) return {};
+  const c = luckRoyale.read();
+  const chestId = Number(req.chest_id || c.chestId);
+  const now = nowSecs();
+  if (!c.enabled || chestId !== c.chestId || now < c.startTime || now >= c.endTime) return {};
+  const count = Number(req.gacha_type) === 2 ? 10 : 1;
+  account.gacha_state = account.gacha_state && typeof account.gacha_state === 'object' ? account.gacha_state : {};
+  const state = account.gacha_state[chestId] || { draws:0, exchanged:[], pity:0, nextFree:0, singles:0, multis:0, history:[] };
+  const free = count === 1 && c.freeIntervalSeconds > 0 && Number(state.nextFree || 0) <= now;
+  const price = free ? 0 : (count === 10 ? c.multiPrice : c.singlePrice);
+  const currency = c.coinType === 1 ? 'coins' : 'gems';
+  if (Number(account[currency] || 0) < price) {
+    ctx.logger.warn(`[gacha] insufficient ${currency} uid=${account.uid} need=${price} have=${account[currency] || 0}`);
+    return { lottery_count_weekly:Number(state.draws || 0), next_free_time:Number(state.nextFree || 0), not_got_num:Number(state.pity || 0) };
+  }
+
+  account[currency] = Number(account[currency] || 0) - price;
+  account.wallet = account.wallet || {};
+  account.wallet.coins = Number(account.coins || 0); account.wallet.gems = Number(account.gems || 0);
+  const goods = [];
+  for (let i=0;i<count;i+=1) {
+    state.pity = Number(state.pity || 0) + 1;
+    let reward;
+    if (c.pityDraws > 0 && state.pity >= c.pityDraws) {
+      const jackpots = c.pool.filter((x) => x.jackpot); reward = weighted(jackpots); state.pity = 0;
+    } else {
+      reward = weighted(c.pool); if (reward.jackpot) state.pity = 0;
+    }
+    let destId = reward.itemId, destNum = reward.quantity;
+    if (owns(account, reward.itemId) && reward.duplicateItemId && reward.duplicateQuantity) { destId=reward.duplicateItemId; destNum=reward.duplicateQuantity; }
+    addItem(account, destId, destNum); goods.push(exchanged(reward, destId, destNum));
+    state.history = Array.isArray(state.history) ? state.history : [];
+    state.history.unshift({ at:now, itemId:destId, quantity:destNum, jackpot:reward.jackpot === true });
+  }
+  state.history = state.history.slice(0, 50); state.draws=Number(state.draws||0)+count;
+  if (count===10) state.multis=Number(state.multis||0)+1; else state.singles=Number(state.singles||0)+1;
+  if (free) state.nextFree=now+c.freeIntervalSeconds;
+  account.gacha_state[chestId]=state; ctx.savePlayer();
+  return { lottery_goods:goods, lottery_count_weekly:state.draws, next_free_time:Number(state.nextFree||0),
+    limit_purchase_count_one:Math.max(0,999-Number(state.singles||0)), limit_purchase_count_ten:Math.max(0,999-Number(state.multis||0)),
+    not_got_num:state.pity, first_draw_reward_num:state.draws, has_big_reward:goods.some((x)=>c.pool.some((p)=>p.jackpot&&p.itemId===x.origin_award_id)) };
+}
+module.exports={endpoint:'PurchaseGacha',reqType:'CSLotteryReq',resType:'CSLotteryRes',handler};

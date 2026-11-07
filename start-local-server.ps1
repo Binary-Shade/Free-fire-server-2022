@@ -23,17 +23,28 @@ function Wait-LocalPort {
 
   $until = (Get-Date).AddSeconds($TimeoutSeconds)
   do {
-    if (Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue) {
-      Write-Host "Ready: $Name (TCP $Port)"
-      return
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+      $pending = $client.BeginConnect('127.0.0.1', $Port, $null, $null)
+      if ($pending.AsyncWaitHandle.WaitOne(250) -and $client.Connected) {
+        $client.EndConnect($pending)
+        Write-Host "Ready: $Name (TCP $Port)"
+        return
+      }
+    } catch {
+      # The service may still be starting; retry until the deadline below.
+    } finally {
+      $client.Dispose()
     }
     Start-Sleep -Milliseconds 250
   } while ((Get-Date) -lt $until)
   throw "$Name did not open TCP port $Port within $TimeoutSeconds seconds. Check data\lan-test\*.err.log"
 }
 
-# A fresh start prevents duplicate Node/UDP/proxy instances and stale route state.
-if ((Test-Path -LiteralPath $stateFile) -and -not $KeepRunning) {
+# A fresh start prevents duplicate Node/UDP/proxy instances, stale Redis leader
+# leases, and an older matchmaker consuming queues with obsolete settings.
+# KeepRunning controls supervision after startup; it must not skip cleanup.
+if (Test-Path -LiteralPath $stateFile) {
   Write-Host 'Stopping the previous local stack...'
   & (Join-Path $scriptRoot 'stop-lan-test.ps1')
 }
@@ -69,3 +80,22 @@ if ($DirectClient) {
 }
 
 Write-Host "Logs: $(Join-Path $repoRoot 'data\lan-test')"
+
+# Some automation hosts place child processes in a job object and terminate
+# them as soon as the launcher exits.  KeepRunning makes this script the
+# supervisor so the complete stack survives for the duration of a test run.
+if ($KeepRunning) {
+  Write-Host 'Supervisor active. Press Ctrl+C to stop monitoring the local stack.' -ForegroundColor Cyan
+  while ($true) {
+    Start-Sleep -Seconds 5
+    if (-not (Test-Path -LiteralPath $stateFile)) {
+      throw 'The local stack state file disappeared while supervision was active.'
+    }
+    $dead = @(Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json | Where-Object {
+      -not (Get-Process -Id $_.Id -ErrorAction SilentlyContinue)
+    })
+    if ($dead.Count -gt 0) {
+      throw "Local service exited: $($dead.Name -join ', '). Check data\lan-test\*.err.log"
+    }
+  }
+}
