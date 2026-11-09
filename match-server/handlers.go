@@ -9,6 +9,17 @@ import (
 	"libmadoka/match-server/packet"
 )
 
+func reconnectKey(payload []byte) string {
+	if len(payload) < 4 {
+		return ""
+	}
+	n := int(binary.LittleEndian.Uint32(payload))
+	if n <= 0 || n > 128 || 4+n > len(payload) {
+		return ""
+	}
+	return string(payload[4 : 4+n])
+}
+
 // route dispatches one decoded packet to its handler. The ack + the serve()/run() routing are
 // done by dispatch; route runs either inline (pre-match) or on run()'s goroutine (via the mailbox).
 // Each case is a thin delegate — the actual work lives in the handleXxx methods below.
@@ -124,26 +135,34 @@ func (s *session) handleInGameChat(p *packet.Packet) {
 	log.Printf("[mm-udp] in-game chat uid=%d bytes=%d", s.player.AccountID, len(p.Payload))
 }
 
-// handleHello answers HELLO / reconnect with S2C_Hello_Res. A cmd 5 reconnect is a
-// mid-match transport re-handshake: the client is already in the running battle and
-// does NOT re-post cmd 440, so the join packets (100/101/130) must NOT be resent —
-// but our CS replication stream died with the old session, so resume it.
+// handleHello answers HELLO / reconnect with S2C_Hello_Res. A cmd 5 reconnect
+// echoes the opaque SessionKey issued on the first HELLO, so a changed UDP
+// source port can reclaim the existing transport without rebuilding the scene.
 func (s *session) handleHello(p *packet.Packet) {
-	res := packet.BuildHelloRes("libmadoka", 0, 0, false)
+	if p.Cmd == packet.CmdReconnect && s.match == nil {
+		key := reconnectKey(p.Payload)
+		sessionsMu.Lock()
+		old := sessionsByKey[key]
+		valid := old != nil && old.match != nil && !old.match.ended
+		sessionsMu.Unlock()
+		if valid {
+			s.sessionKey = key
+			res := packet.BuildHelloRes(key, 0, 0, false)
+			s.sendHelloRes(res)
+			old.enqueue(func() { old.match.resumeTransport(old, s) })
+			log.Printf("[mm-udp] fast reconnect session=%s old=%v new=%v", key, old.remote, s.remote)
+			return
+		}
+	}
+	if s.sessionKey == "" {
+		s.sessionKey = newSessionKey()
+		sessionsMu.Lock()
+		sessionsByKey[s.sessionKey] = s
+		sessionsMu.Unlock()
+	}
+	res := packet.BuildHelloRes(s.sessionKey, 0, 0, false)
 	s.sendHelloRes(res)
 	log.Printf("[mm-udp] HELLO(cmd=%d) %v -> S2C_Hello_Res (%dB)", p.Cmd, s.remote, len(res))
-	if p.Cmd == packet.CmdReconnect && s.match == nil {
-		if s.player.AccountID == 0 {
-			s.player = resolvePlayer("") // fallback player (EntityID=1, RepID 1000) — matches the original join
-		}
-		s.joined = true
-		m := newMatch(s)
-		matchManager.register(m)
-		m.setupMatch(s) // arena / roster / round / bot — no re-join packets (client is already in-match)
-		log.Printf("[mm-udp] reconnect mid-match -> solo resume (no re-join) %v", s.remote)
-		s.startMatchLoop()
-		s.enqueue(s.resyncWalls) // redraw lost gloo walls on run()'s goroutine (cmd 220)
-	}
 }
 
 // handlePing echoes the ping back unreliably to keep the client's ping timer alive.
@@ -161,6 +180,9 @@ func (s *session) handlePing(p *packet.Packet) {
 func (s *session) handleJoinMatchPost(p *packet.Packet) {
 	s.player = resolvePlayer(s.prepareToken(p.Payload))
 	s.joined = true
+	if matchManager.resume(s) {
+		return
+	}
 	matchManager.join(s) // Step 5b: route to a match (existing with room, else new) + admit
 }
 

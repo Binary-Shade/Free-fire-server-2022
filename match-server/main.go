@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -22,9 +24,18 @@ const secretHex = "00112233445566778899aabbccddeeff"
 // Active sessions, keyed by remote UDP address. Package-level so the shutdown handler
 // can kick every connected client. Guarded by sessionsMu.
 var (
-	sessions   = map[string]*session{}
-	sessionsMu sync.Mutex
+	sessions      = map[string]*session{}
+	sessionsByKey = map[string]*session{}
+	sessionsMu    sync.Mutex
 )
+
+func newSessionKey() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
 
 // eventBus is the process-wide Redis event bus, or nil when REDIS_URL is unset or
 // unreachable — the match server then runs standalone (unchanged). Match end

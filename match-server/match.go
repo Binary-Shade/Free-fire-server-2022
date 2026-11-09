@@ -251,6 +251,22 @@ func (m *Match) removePlayer(s *session) {
 	if m.sessionByEntity(s.entityID) == nil {
 		return // already gone
 	}
+	sessionsMu.Lock()
+	if s.remote != nil {
+		delete(sessions, s.remote.String())
+	}
+	if s.sessionKey != "" && sessionsByKey[s.sessionKey] == s {
+		delete(sessionsByKey, s.sessionKey)
+	}
+	sessionsMu.Unlock()
+	if eventBus != nil && s.player.AccountID != 0 {
+		accountID := s.player.AccountID
+		go func() {
+			if err := eventBus.ClearActiveMatch(accountID); err != nil {
+				log.Printf("[mm-udp] clear active match uid=%d: %v", accountID, err)
+			}
+		}()
+	}
 	// Tell the OTHERS "this player left" via cmd 102 (RUDP_PLAYER_QUIT) — the client removes just that
 	// entity. This was cmd 192 (PLAYER_QUIT_RES), the server's ack of the recipient's OWN quit, so every
 	// remaining client read it as "my quit was accepted" and left too — the mass disconnect.
@@ -283,7 +299,6 @@ func (m *Match) removePlayer(s *session) {
 // TCP, the lobby pushes a reconnect handoff, and it re-joins on a NEW UDP connection) before removal.
 const (
 	disconnectTimeout = 10 * time.Second
-	reconnectGrace    = 45 * time.Second
 	afkFightTimeout   = 90 * time.Second
 )
 
@@ -323,9 +338,9 @@ func (m *Match) sweepDisconnects(now time.Time) {
 		if !p.disconnected {
 			p.disconnected = true
 			p.disconnectedAt = now
-			log.Printf("[mm-udp] player ent=%#x went silent -> disconnected; %s reconnect grace %v", p.entityID, reconnectGrace, p.remote)
+			log.Printf("[mm-udp] player ent=%#x went silent -> disconnected; %s reconnect grace %v", p.entityID, cfg.reconnectGrace, p.remote)
 		}
-		if now.Sub(p.disconnectedAt) >= reconnectGrace {
+		if now.Sub(p.disconnectedAt) >= cfg.reconnectGrace {
 			log.Printf("[mm-udp] player ent=%#x reconnect grace expired -> removing frozen pawn %v", p.entityID, p.remote)
 			m.removePlayer(p)
 			return // removePlayer rebuilt m.players; stop iterating the stale slice, resume next tick
@@ -476,6 +491,113 @@ func (m *Match) admitLater(s *session) {
 	} // BR has world loot, never the CS buy panel
 	s.broadcastZone() // draw the current safe zone for the joiner
 	log.Printf("[mm-udp] admitted player slot=%d ent=%#08x (roster=%d) %v", s.slot, s.entityID, len(m.players), s.remote)
+}
+
+// resumePlayer moves an existing authoritative player session onto a newly
+// authenticated UDP transport and replays enough world state for a freshly
+// loaded battle scene. The session object itself is kept, preserving inventory,
+// HP, scores, skill cooldowns and entity/PRI ids across the disconnect.
+func (m *Match) replaceTransport(s, incoming *session) {
+	oldAddr := ""
+	if s.remote != nil {
+		oldAddr = s.remote.String()
+	}
+	newAddr := incoming.remote.String()
+
+	sessionsMu.Lock()
+	if oldAddr != "" {
+		delete(sessions, oldAddr)
+	}
+	delete(sessions, newAddr)
+	if s.sessionKey != "" && s.sessionKey != incoming.sessionKey {
+		delete(sessionsByKey, s.sessionKey)
+	}
+	if incoming.sessionKey != "" {
+		s.sessionKey = incoming.sessionKey
+	}
+	s.conn, s.remote, s.key, s.out = incoming.conn, incoming.remote, incoming.key, incoming.out
+	sessions[newAddr] = s
+	if s.sessionKey != "" {
+		sessionsByKey[s.sessionKey] = s
+	}
+	sessionsMu.Unlock()
+
+	now := time.Now()
+	s.lastSeen.Store(now.UnixNano())
+	s.lastAction.Store(now.UnixNano())
+	s.disconnected = false
+	s.disconnectedAt = time.Time{}
+	s.afkEliminated = false
+	s.stopped.Store(false)
+}
+
+// resumeTransport handles cmd-5's SessionKey reconnect while the battle scene
+// remains loaded. It swaps only the network path and sends an immediate state
+// anchor so a lost round-edge/teleport cannot leave the client one round behind.
+func (m *Match) resumeTransport(s, incoming *session) {
+	m.replaceTransport(s, incoming)
+	s.resyncWalls()
+	m.tpSeq++
+	s.sendDataLog(packet.CmdTeleport,
+		message.ForceTeleport(s.entityID, m.tpSeq, s.playerPos, s.player.SpawnFace, 0),
+		fmt.Sprintf("cmd=145 fast-reconnect teleport ent=%#x", s.entityID))
+	s.sendVarSelf(packet.CmdPRISync, m.priPayload())
+	m.streamStateTo(s)
+	m.streamClockTo(s)
+	log.Printf("[mm-udp] fast reconnect restored uid=%d match=%d ent=%#x phase=%d round=%d addr=%v",
+		s.player.AccountID, m.matchID, s.entityID, m.phase, m.round, s.remote)
+}
+
+func (m *Match) resumePlayer(s, incoming *session) {
+	m.replaceTransport(s, incoming)
+
+	s.sendDataLog(packet.CmdJoinMatchRes,
+		message.JoinMatchRes(0, m.settings.roomSetting, m.settings.roomSetting2),
+		"cmd=100 reconnect join res")
+	// Self must be first: that is how this client adopts its local pawn.
+	s.sendDataLog(packet.CmdPlayerJoin, message.PlayerJoin(s.player, m.serverTick()),
+		fmt.Sprintf("cmd=101 reconnect self ent=%d %q", s.entityID, s.player.Name))
+	for _, p := range m.players {
+		if p != s {
+			s.sendDataLog(packet.CmdPlayerJoin, message.PlayerJoin(p.player, m.serverTick()),
+				fmt.Sprintf("cmd=101 reconnect peer ent=%d %q", p.entityID, p.player.Name))
+		}
+	}
+	if m.botEntity != 0 {
+		for _, b := range m.bots {
+			jp := m.botSpawn(b.entityID, 0)
+			s.sendDataLog(packet.CmdPlayerJoin, message.PlayerJoin(jp, m.serverTick()),
+				fmt.Sprintf("cmd=101 reconnect bot ent=%d", b.entityID))
+		}
+	}
+	s.sendDataLog(packet.CmdJoinMatchFinished, message.JoinMatchFinished(), "cmd=130 reconnect finished")
+	s.sendDataLog(packet.CmdSyncRegionActivities, message.SyncRegionActivitiesDefault(),
+		"cmd=176 reconnect region activities")
+	s.bindPRIs()
+
+	// Restore the complete visible loadout for every pawn, then the player's own
+	// shop and world objects. These are reliable and survive a second short outage.
+	for _, p := range m.players {
+		s.sendDataLog(packet.CmdSyncInventory, p.currentInventorySync(),
+			fmt.Sprintf("cmd=174 reconnect inventory ent=%#x", p.entityID))
+		p.resendEquipTo(s)
+		p.resendAttachTo(s)
+	}
+	if !m.training && !m.battleRoyale {
+		s.sendCSShop()
+	}
+	s.resyncWalls()
+
+	// Re-anchor the pawn and immediately replay the current authoritative phase.
+	m.tpSeq++
+	s.sendDataLog(packet.CmdTeleport,
+		message.ForceTeleport(s.entityID, m.tpSeq, s.playerPos, s.player.SpawnFace, 0),
+		fmt.Sprintf("cmd=145 reconnect teleport ent=%#x", s.entityID))
+	s.sendVarSelf(packet.CmdPRISync, m.priPayload())
+	m.streamStateTo(s)
+	m.streamClockTo(s)
+	log.Printf("[mm-udp] reconnect restored uid=%d match=%d ent=%#x phase=%d round=%d addr=%v",
+		s.player.AccountID, m.matchID, s.entityID, m.phase, m.round, s.remote)
 }
 
 // startCSMatch launches the match's tick loop once per session. Safe to call from both the
@@ -754,6 +876,28 @@ func (m *Match) stream() {
 	s.sendVar(packet.CmdGRISync, message.CSGRIMatchPoint(uint8(point)), 1)
 }
 
+// streamStateTo is the single-client form of stream, used after reconnect once
+// the roster and PRI bindings have been rebuilt on that client.
+func (m *Match) streamStateTo(s *session) {
+	phase, ok := griPhase(m.phase)
+	if !ok {
+		return
+	}
+	param := m.phaseParam()
+	if m.phase == phSetupWait {
+		param = 0
+	}
+	state, stateDeadline := m.matchState()
+	s.sendVarSelf(packet.CmdGRISync, message.CSGRIInit(m.settings.maxRound, uint8(m.round-1)))
+	s.sendVarSelf(packet.CmdGRISync, message.CSGRIMatchState(state, stateDeadline))
+	s.sendVarSelf(packet.CmdGRISync, message.CSGRIPhase(phase, param))
+	point := uint8(0)
+	if m.teamScore[0] == m.settings.roundsToWin-1 || m.teamScore[1] == m.settings.roundsToWin-1 {
+		point = 1
+	}
+	s.sendVarSelf(packet.CmdGRISync, message.CSGRIMatchPoint(point))
+}
+
 // streamClock streams cmd 1000 (server clock) to every human in the roster so the CS countdowns
 // tick. It is SendUnreliable + plaintext (no per-connection seq), so the same packet fans to all.
 // Replaces serverTimeLoop.
@@ -770,6 +914,15 @@ func (m *Match) streamClock() {
 			p.out.send(pkt, "")
 		}
 	}
+}
+
+func (m *Match) streamClockTo(s *session) {
+	if s.out == nil {
+		return
+	}
+	tick := uint32(time.Since(m.matchStart).Seconds() / clientFixedDelta)
+	s.out.send(&packet.Packet{SendOption: packet.SendUnreliable, Cmd: packet.CmdSyncServerTime, Flags: 0,
+		Payload: message.SyncServerTime(tick)}, "")
 }
 
 // serverTick is the match-tick the LOCAL player's cmd 101 (field CEDJCPLOLNE) anchors the client's

@@ -227,6 +227,12 @@ func (b *Bus) Get(key string) (string, error) {
 	return v, err
 }
 
+// ClearActiveMatch removes the reconnect handoff once a player explicitly
+// leaves or exhausts the grace window. Callers run this outside the match tick.
+func (b *Bus) ClearActiveMatch(accountID uint64) error {
+	return b.rdb.Del(b.ctx, fmt.Sprintf("active-match:%d", accountID)).Err()
+}
+
 // RegisterServer advertises this instance in the match-server fleet registry (a Redis
 // sorted set "matchservers" scored by heartbeat time), so the matchmaker can allocate
 // whole matches to a LIVE instance. addr is the PUBLIC host:port the client dials for

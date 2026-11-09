@@ -14,8 +14,9 @@ import (
 // once at startup so the hot paths (handlers, the match loop) don't scatter os.Getenv
 // calls. cfg is the process-wide instance, set by main().
 type config struct {
-	jwtSecret []byte        // verifies the cmd 440 prepare_token (env MATCH_JWT_SECRET)
-	buyPhase  time.Duration // CS Prepare/shop duration before advancing to Fight
+	jwtSecret      []byte        // verifies the cmd 440 prepare_token (env MATCH_JWT_SECRET)
+	buyPhase       time.Duration // CS Prepare/shop duration before advancing to Fight
+	reconnectGrace time.Duration // how long a silent player's authoritative state is retained
 
 	// Diagnostics — all optional; the zero value is production behaviour.
 	holdPrepare bool          // MATCH_HOLD_PREPARE=1: never advance past Prepare (keeps spawn fences up)
@@ -48,6 +49,7 @@ func loadConfig() config {
 	c := config{
 		jwtSecret:          []byte(envOr("MATCH_JWT_SECRET", "dev-match-secret-change-me")),
 		buyPhase:           10 * time.Second,
+		reconnectGrace:     durationSecondsEnv("MATCH_RECONNECT_GRACE_SEC", 300),
 		spawnFace:          message.Vec3{X: 0, Y: 0, Z: 1},
 		holdPrepare:        os.Getenv("MATCH_HOLD_PREPARE") == "1",
 		debugPos:           os.Getenv("MATCH_DEBUG_POS") == "1",
@@ -71,6 +73,14 @@ func loadConfig() config {
 		c.teleport = &tp
 	}
 	return c
+}
+
+func durationSecondsEnv(key string, fallback int) time.Duration {
+	n, err := strconv.Atoi(os.Getenv(key))
+	if err != nil || n < 10 {
+		n = fallback
+	}
+	return time.Duration(n) * time.Second
 }
 
 func envOr(key, def string) string {

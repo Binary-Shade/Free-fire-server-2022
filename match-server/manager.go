@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 // maxPlayers caps a CS match's roster at the user's 8-player limit; the minimum of 2 comes for
 // free because a lone human always has the enemy bot for company. The MatchManager enforces the
@@ -51,14 +54,36 @@ func (mgr *MatchManager) join(s *session) {
 	h.admit(s, fresh) // wire the player in (fresh starts run(); a later player enqueues onto its loop)
 }
 
-// register adds an already-built in-process match to the registry (the reconnect resume in
-// handleHello mints its own solo *Match outside join()). It bypasses the factory because a mid-match
-// resume is inherently in-process — the client is already connected to THIS process.
-func (mgr *MatchManager) register(m *Match) {
+// resume reattaches a new UDP transport to an existing player. Match id and
+// account id are both read from the signed prepare token. The old session is
+// retained because it owns that player's inventory, entity ids and skill state.
+func (mgr *MatchManager) resume(in *session) bool {
 	mgr.mu.Lock()
-	mgr.matches = append(mgr.matches, m)
-	m.reserved++
+	var m *Match
+	var old *session
+	for _, h := range mgr.matches {
+		cand, ok := h.(*Match)
+		if !ok || cand.ended || cand.matchID == 0 || cand.matchID != in.player.MatchID {
+			continue
+		}
+		for _, p := range cand.players {
+			if p.player.AccountID == in.player.AccountID {
+				m, old = cand, p
+				break
+			}
+		}
+		if old != nil {
+			break
+		}
+	}
 	mgr.mu.Unlock()
+	if old == nil {
+		return false
+	}
+	old.enqueue(func() { m.resumePlayer(old, in) })
+	log.Printf("[mm-udp] reconnect accepted uid=%d match=%d old=%v new=%v",
+		in.player.AccountID, in.player.MatchID, old.remote, in.remote)
+	return true
 }
 
 // reap removes a finished match from the registry — called from its run() goroutine on exit. It's a

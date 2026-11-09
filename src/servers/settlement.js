@@ -12,6 +12,7 @@ const { Bus } = require('../bus');
 const { getRepo } = require('../db/repo');
 const { EProtocol, EStats } = require('../tcp/protocol');
 const { buildStatsRes } = require('../tcp/matchstats');
+const activeMatch = require('../tcp/active-match');
 
 const GROUP = 'settlement';
 
@@ -26,6 +27,7 @@ async function handleMatchResult(env, repo, bus) {
     if (!pr.account_id) continue; // no account (shouldn't happen) — skip
     const r = await repo.settleMatchResult(mr.match_id, pr);
     if (r.credited) credited++;
+    await activeMatch.clear(bus, pr.account_id);
   }
   logger.info(`[settlement] match=${mr.match_id} players=${mr.players.length} credited=${credited}`);
   // Post-match lobby scoreboard: push MATCHSTATS_NTF to each ONLINE player with their

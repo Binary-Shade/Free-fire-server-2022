@@ -26,6 +26,7 @@ const matchmaker = require('./matchmaker');
 const rooms = require('./rooms');
 const { getBus } = require('../bus/instance');
 const { Bus } = require('../bus');
+const activeMatch = require('./active-match');
 
 // account uid -> { socket, account, region, lastSeen }
 const sessions = new Map();
@@ -45,6 +46,19 @@ function markOnline(uid) {
 function markOffline(uid) {
   const bus = getBus();
   if (bus) bus.clearPresence(uid).catch((e) => logger.warn(`[tcp] presence clear uid=${uid}: ${e.message}`));
+}
+
+async function restoreActiveMatch(accountId) {
+  const bus = getBus();
+  if (!bus || !sessions.has(accountId)) return;
+  try {
+    const handoff = await activeMatch.load(bus, accountId);
+    if (!handoff || !sessions.has(accountId)) return;
+    notifyRaw(accountId, handoff.protocol, handoff.cmd, handoff.content);
+    logger.info(`[tcp] restored active match uid=${accountId} match=${handoff.matchId || '?'}`);
+  } catch (e) {
+    logger.warn(`[tcp] active-match restore uid=${accountId}: ${e.message}`);
+  }
 }
 
 // True if `account` is banned per the game store's flag or the auth store
@@ -162,6 +176,7 @@ async function handleFrame(socket, f, entry, peer) {
     markOnline(account.uid); // publish cross-layer presence
     socket.write(INIT_ACK); // server init ack
     logger.info(`[tcp] authenticated uid=${account.uid} nickname="${account.nickname || ''}" region=${f.region} (${peer})`);
+    setTimeout(() => restoreActiveMatch(account.uid), 500).unref();
     return newEntry;
   }
 

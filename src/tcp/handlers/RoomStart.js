@@ -19,6 +19,8 @@ const matchmaker = require('../matchmaker');
 const fleet = require('../fleet');
 const { getBus } = require('../../bus/instance');
 const { getRepo } = require('../../db/repo');
+const { lookup } = require('../../protocol/protos');
+const activeMatch = require('../active-match');
 
 const MATCH_SECRET = '00112233445566778899aabbccddeeff'; // 16-byte TEA key; must match the match server (main.go secretHex)
 const ROOM_MATCH_MODE = 3; // GameFacade.GameServerMatchMode 3 = CUSTOM ROOM (IsCustomRoom); NOT 6 (ranked CS)
@@ -75,6 +77,7 @@ async function handler(reqObj, ctx) {
       ctx.logger.warn(`[room] start settings write match=${matchId}: ${e.message}`);
     }
 
+    const reconnectBus = getBus();
     for (const m of room.members) {
       if (!m.account_id) continue;
       // the host is ctx.account (fresh); look the others up for their cosmetics.
@@ -89,7 +92,7 @@ async function handler(reqObj, ctx) {
         game_mode: room.game_mode,
         match_mode: ROOM_MATCH_MODE
       });
-      rooms.pushToAccount(m.account_id, ECustomRoom.MATCHMAKINGSUSS_NTF, 'MatchmakingSussNtf', {
+      const handoff = {
         match_id: matchId,
         server_addr: serverAddr,
         secret: MATCH_SECRET,
@@ -109,7 +112,18 @@ async function handler(reqObj, ctx) {
         difficulty: 0,
         use_cache: false,
         first_login: false
-      });
+      };
+      rooms.pushToAccount(m.account_id, ECustomRoom.MATCHMAKINGSUSS_NTF, 'MatchmakingSussNtf', handoff);
+      const Suss = lookup('MatchmakingSussNtf');
+      if (reconnectBus && Suss) {
+        const content = Buffer.from(Suss.encode(Suss.fromObject(handoff)).finish());
+        await activeMatch.save(reconnectBus, m.account_id, {
+          matchId,
+          protocol: EProtocol.ROOM,
+          cmd: ECustomRoom.MATCHMAKINGSUSS_NTF,
+          content
+        });
+      }
     }
     ctx.logger.info(`[room] START match=${matchId} room=${room.id} -> ${serverAddr} players=${room.members.length}`);
     return null; // START(11) reply is a client no-op; the suss(16) pushes drive the launch

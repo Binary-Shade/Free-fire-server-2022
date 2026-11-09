@@ -28,10 +28,11 @@ type csWeapon struct {
 // starts, the join handlers mutate it directly on the receive goroutine — run() isn't up yet, so
 // there is no contention.
 type session struct {
-	conn   *net.UDPConn
-	remote *net.UDPAddr
-	key    []byte
-	out    *Writer // this connection's outbound path — owns seq/order + every send (see writer.go)
+	conn       *net.UDPConn
+	remote     *net.UDPAddr
+	key        []byte
+	sessionKey string  // opaque reconnect identity returned by HELLO and echoed by cmd 5
+	out        *Writer // this connection's outbound path — owns seq/order + every send (see writer.go)
 
 	joined      bool
 	syncStarted bool        // match loop already running (guard); once true, dispatch routes handlers to the mailbox
@@ -207,5 +208,15 @@ func (s *session) sendVar(cmd uint16, payload []byte, repeat int) {
 	outs := s.match.rosterWriters()
 	for i := 0; i < repeat; i++ {
 		broadcast(wire, outs)
+	}
+}
+
+// sendVarSelf sends a replication snapshot only to this client. It is used by
+// reconnect recovery after the new transport has received its self-first roster
+// and PRI bindings; broadcasting the recovery snapshot would unnecessarily reset
+// phase handlers on healthy peers.
+func (s *session) sendVarSelf(cmd uint16, payload []byte) {
+	if s.out != nil {
+		s.out.sendRaw(frameVar(cmd, payload, s.key))
 	}
 }

@@ -31,6 +31,7 @@ const fleet = require('./fleet');
 const { getBus } = require('../bus/instance');
 const { getRepo } = require('../db/repo');
 const characters = require('../../config/character-settings');
+const activeMatch = require('./active-match');
 
 const MIN_PLAYERS = Number(process.env.MM_MIN_PLAYERS || 2);    // form a match at N players...
 const TIMEOUT_MS = Number(process.env.MM_TIMEOUT_MS || 10000);  // ...or after this wait
@@ -61,7 +62,8 @@ function enqueue(account, _gateway, mode) {
   const accountId = account.uid || account.account_id;
   const bus = getBus();
   if (!bus || !accountId) return Promise.resolve(false);
-  const queued = bus.hset(QUEUE_KEY, accountId, JSON.stringify({ node: config.nodeId, mode, joinedAt: Date.now() }))
+  const queued = activeMatch.clear(bus, accountId)
+    .then(() => bus.hset(QUEUE_KEY, accountId, JSON.stringify({ node: config.nodeId, mode, joinedAt: Date.now() })))
     .then(() => true)
     .catch((e) => { logger.warn(`[mm] enqueue uid=${accountId}: ${e.message}`); return false; });
   logger.info(`[mm] enqueue uid=${accountId} mode=${modeKey(mode)}`);
@@ -75,7 +77,11 @@ async function enqueueGroup(accounts, _gateway, mode) {
   const party = `${config.nodeId}:${mode.group_id}:${crypto.randomUUID()}`;
   const fields = {};
   for (const id of ids) fields[id] = JSON.stringify({ node: config.nodeId, mode, joinedAt: Date.now(), party, partyMembers: ids });
-  try { await bus.hsetMany(QUEUE_KEY, fields); return true; }
+  try {
+    await Promise.all(ids.map((id) => activeMatch.clear(bus, id)));
+    await bus.hsetMany(QUEUE_KEY, fields);
+    return true;
+  }
   catch (err) { logger.warn(`[mm] group enqueue: ${err.message}`); return false; }
 }
 
@@ -267,6 +273,12 @@ async function formMatch(entries) {
       use_cache: false,
       first_login: false
     })).finish()) : Buffer.alloc(0);
+    await activeMatch.save(bus, e.accountId, {
+      matchId,
+      protocol: EProtocol.MATCHMAKING,
+      cmd: EMatchmaking.MATCHMAKINGSUSS_NTF,
+      content
+    });
     // Push the SussNtf to whichever gateway holds this player (gw.push, presence-routed).
     await bus.publishPS('gw.push', 'GatewayPush', {
       target_account_id: e.accountId,

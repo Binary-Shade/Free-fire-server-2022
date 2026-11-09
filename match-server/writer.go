@@ -12,13 +12,14 @@ import (
 
 // RUDP retransmission tuning. A reliable (so=2) send is buffered until the client ACKs
 // its seq; if the ACK doesn't arrive within rudpRTO it is resent (same bytes / seq, so the
-// client de-dupes by seq), up to rudpMaxRetries. The client ACKs each reliable packet
+// client de-dupes by seq) with bounded backoff for rudpReliableLife. The client ACKs each reliable packet
 // individually (cmd 2, payload [seq u16][ackBits u32]) — the server used to IGNORE those,
 // so a dropped death/inventory/teleport was lost forever.
 const (
-	rudpRTO        = 250 * time.Millisecond
-	rudpTick       = 50 * time.Millisecond
-	rudpMaxRetries = 8
+	rudpRTO          = 250 * time.Millisecond
+	rudpMaxRTO       = 2 * time.Second
+	rudpTick         = 50 * time.Millisecond
+	rudpReliableLife = 20 * time.Second
 )
 
 // Writer is one connection's outbound path. A single goroutine (run) owns the seq/order
@@ -52,10 +53,11 @@ type ackFrame struct {
 // (resent verbatim, keeping the same seq so the client de-dupes), the next resend deadline,
 // and how many times it has been resent.
 type pendingPkt struct {
-	label    string
-	wire     []byte
-	deadline time.Time
-	retries  int
+	label     string
+	wire      []byte
+	firstSent time.Time
+	deadline  time.Time
+	retries   int
 }
 
 // outItem is one queued send: either a pre-encoded packet emitted verbatim (raw — e.g. an ack)
@@ -134,7 +136,8 @@ func (w *Writer) emit(it outItem) {
 	// Buffer ordered reliable data (so=2) for retransmit. HELLO (so=1) is a one-shot handshake;
 	// VAR/unreliable carry no seq, so they aren't retransmittable.
 	if it.pkt.SendOption == packet.SendReliable {
-		w.pending[it.pkt.SeqID] = &pendingPkt{wire: wire, deadline: time.Now().Add(rudpRTO), label: it.label}
+		now := time.Now()
+		w.pending[it.pkt.SeqID] = &pendingPkt{wire: wire, firstSent: now, deadline: now.Add(rudpRTO), label: it.label}
 	}
 	if it.label != "" {
 		log.Printf("[mm-udp] -> %s (seq=%d order=%d %dB) %v", it.label, it.pkt.SeqID, it.pkt.OrderID, len(it.pkt.Payload), w.addr)
@@ -142,22 +145,27 @@ func (w *Writer) emit(it outItem) {
 }
 
 // retransmit resends every buffered reliable packet whose RTO has elapsed (same bytes/seq),
-// dropping any that exhausts rudpMaxRetries (the client is gone or will reconnect).
+// dropping any that remains unacknowledged for rudpReliableLife (the client is gone or will reconnect).
 func (w *Writer) retransmit(now time.Time) {
 	for seq, p := range w.pending {
 		if now.Before(p.deadline) {
 			continue
 		}
-		if p.retries >= rudpMaxRetries {
+		if now.Sub(p.firstSent) >= rudpReliableLife {
 			delete(w.pending, seq)
-			log.Printf("[mm-udp] retransmit gave up on seq=%d (%d tries) %v", seq, p.retries, w.addr)
+			log.Printf("[mm-udp] retransmit gave up on seq=%d after %s (%d tries) %v",
+				seq, rudpReliableLife, p.retries, w.addr)
 			continue
 		}
 		if _, err := w.conn.WriteToUDP(p.wire, w.addr); err != nil {
 			log.Printf("[mm-udp] retransmit err: %v", err)
 		}
 		p.retries++
-		p.deadline = now.Add(rudpRTO)
+		backoff := rudpRTO << min(p.retries, 3)
+		if backoff > rudpMaxRTO {
+			backoff = rudpMaxRTO
+		}
+		p.deadline = now.Add(backoff)
 	}
 }
 

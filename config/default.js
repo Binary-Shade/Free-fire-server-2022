@@ -68,7 +68,7 @@ module.exports = {
     jwtSecret: process.env.MATCH_JWT_SECRET || 'dev-match-secret-change-me',
     // prepare_token lifetime (seconds); the token is minted when a match forms
     // and consumed when the client posts cmd 440 to the game server.
-    jwtTtlSec: Number(process.env.MATCH_JWT_TTL_SEC || 600)
+    jwtTtlSec: Number(process.env.MATCH_JWT_TTL_SEC || 7200)
   },
   // --- infra migration (Phase 0+) -------------------------------------------
   // Redis event bus (Streams + PubSub); consumed by the bus client in src/bus.
