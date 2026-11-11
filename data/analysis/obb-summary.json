@@ -1,0 +1,421 @@
+﻿{
+    "file":  "Original-main.2019114971.com.dts.freefireth.obb",
+    "sha256":  "4e481bd0cb81ca48e2d0b603591bb58c2783ba4397e2ebee4cbc31c59da85aa7",
+    "entries":  33964,
+    "uncompressed_bytes":  1352964299,
+    "compressed_bytes":  583635945,
+    "top_paths":  [
+                      {
+                          "Name":  "assets",
+                          "Count":  33963,
+                          "Bytes":  1352964216
+                      },
+                      {
+                          "Name":  "META-INF",
+                          "Count":  1,
+                          "Bytes":  83
+                      }
+                  ],
+    "extensions":  [
+                       {
+                           "Name":  "",
+                           "Count":  31252,
+                           "Bytes":  1106727546
+                       },
+                       {
+                           "Name":  ".resource",
+                           "Count":  1265,
+                           "Bytes":  33467874
+                       },
+                       {
+                           "Name":  ".assets",
+                           "Count":  1239,
+                           "Bytes":  46042141
+                       },
+                       {
+                           "Name":  ".split0",
+                           "Count":  24,
+                           "Bytes":  25165824
+                       },
+                       {
+                           "Name":  ".split1",
+                           "Count":  24,
+                           "Bytes":  16017700
+                       },
+                       {
+                           "Name":  ".split2",
+                           "Count":  11,
+                           "Bytes":  9802452
+                       },
+                       {
+                           "Name":  ".split3",
+                           "Count":  8,
+                           "Bytes":  7576284
+                       },
+                       {
+                           "Name":  ".split4",
+                           "Count":  7,
+                           "Bytes":  6800308
+                       },
+                       {
+                           "Name":  ".split6",
+                           "Count":  6,
+                           "Bytes":  6291456
+                       },
+                       {
+                           "Name":  ".split7",
+                           "Count":  6,
+                           "Bytes":  5465344
+                       },
+                       {
+                           "Name":  ".split5",
+                           "Count":  6,
+                           "Bytes":  6291456
+                       },
+                       {
+                           "Name":  ".split8",
+                           "Count":  5,
+                           "Bytes":  5018960
+                       },
+                       {
+                           "Name":  ".split9",
+                           "Count":  4,
+                           "Bytes":  4109176
+                       },
+                       {
+                           "Name":  ".split10",
+                           "Count":  3,
+                           "Bytes":  2378872
+                       },
+                       {
+                           "Name":  ".split12",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split11",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split14",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split24",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split23",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split21",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split25",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split13",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split27",
+                           "Count":  2,
+                           "Bytes":  1065604
+                       },
+                       {
+                           "Name":  ".split26",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split16",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split17",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split22",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split15",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split20",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split19",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split18",
+                           "Count":  2,
+                           "Bytes":  2097152
+                       },
+                       {
+                           "Name":  ".split31",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split30",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split29",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split53",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split52",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split55",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split54",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split49",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split48",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split51",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split50",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".json",
+                           "Count":  1,
+                           "Bytes":  7959
+                       },
+                       {
+                           "Name":  ".split60",
+                           "Count":  1,
+                           "Bytes":  285260
+                       },
+                       {
+                           "Name":  ".txt",
+                           "Count":  1,
+                           "Bytes":  10
+                       },
+                       {
+                           "Name":  ".ttf",
+                           "Count":  1,
+                           "Bytes":  132664
+                       },
+                       {
+                           "Name":  ".split57",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split56",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split59",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split58",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split37",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split36",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split39",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split38",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split33",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split32",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split35",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split34",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split45",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split44",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split47",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split46",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split41",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split40",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split43",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".split42",
+                           "Count":  1,
+                           "Bytes":  1048576
+                       },
+                       {
+                           "Name":  ".qkz6co9haif8wnnsr2hdek~2f1liu~3d",
+                           "Count":  1,
+                           "Bytes":  3144
+                       },
+                       {
+                           "Name":  ".p7fykw2f9dwfpccivdy0hzqrfki~3d",
+                           "Count":  1,
+                           "Bytes":  80079
+                       },
+                       {
+                           "Name":  ".o76d1mckuhafnqft2w6m99d9bno~3d",
+                           "Count":  1,
+                           "Bytes":  35614
+                       },
+                       {
+                           "Name":  ".mwcpsl~2f2~2boxow25~2blealc0duu68~3d",
+                           "Count":  1,
+                           "Bytes":  1595
+                       },
+                       {
+                           "Name":  ".~2faaonlhdqk5x~2b8tgab8r8cug3ka~3d",
+                           "Count":  1,
+                           "Bytes":  288727
+                       },
+                       {
+                           "Name":  ".grhy~2b59060xydzhsyxwdvkvahsm~3d",
+                           "Count":  1,
+                           "Bytes":  91736
+                       },
+                       {
+                           "Name":  ".rv8cngql~2fwruvlbfh~2baklqexrmk~3d",
+                           "Count":  1,
+                           "Bytes":  4908
+                       },
+                       {
+                           "Name":  ".jrkpftfv~2fibhcfoa5otmtli8tcs~3d",
+                           "Count":  1,
+                           "Bytes":  2784
+                       },
+                       {
+                           "Name":  ".i88ltce~2fb0ofu4aow45wsdcy1fw~3d",
+                           "Count":  1,
+                           "Bytes":  1036
+                       },
+                       {
+                           "Name":  ".5rasd9uemd0rwq1evlijft5~2btb0~3d",
+                           "Count":  1,
+                           "Bytes":  3590
+                       },
+                       {
+                           "Name":  ".ek8o9gniq3~2f0dgl1ncupjotdb~2fg~3d",
+                           "Count":  1,
+                           "Bytes":  24417
+                       },
+                       {
+                           "Name":  ".qaa9i6iwj~2fvuxdptpsrmay3ipyo~3d",
+                           "Count":  1,
+                           "Bytes":  13425
+                       },
+                       {
+                           "Name":  ".ao0yebsnq6p6~2baw5lolfotjipps~3d",
+                           "Count":  1,
+                           "Bytes":  934
+                       },
+                       {
+                           "Name":  ".59yq6ipst34lulqy0udtdokkxcu~3d",
+                           "Count":  1,
+                           "Bytes":  297838
+                       }
+                   ]
+}

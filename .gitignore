@@ -47,3 +47,25 @@ scripts/__pycache__/
 
 # Proxy certificates are generated per installation and include private keys
 deploy/**/proxy/ca/
+
+# Generated reverse-engineering evidence. Keep the small curated reports below.
+data/relaunch-test/
+data/luck-royale-live/
+data/training-capture/*
+!data/training-capture/TRAINING_MATCH_ANALYSIS.md
+data/analysis/*
+!data/analysis/OBB_ANALYSIS.md
+!data/analysis/OBB_SERVER_AUDIT.md
+!data/analysis/obb-server-audit.json
+!data/analysis/obb-summary.json
+!data/analysis/obb-model-resource-catalog.csv
+!data/analysis/client-http-command-catalog.csv
+!data/analysis/client-udp-command-catalog.csv
+!data/analysis/obb-numeric-ids.csv
+!data/analysis/obb-catalog-summary.json
+data/alok-skill-analysis.json
+data/alok-skill-logcat*.txt
+data/alok-skill-sockets-*.txt
+data/black-screen-second-launch-logcat.txt
+data/bluestacks.conf.before-*
+data/login-desc-settings.json
