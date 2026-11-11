@@ -77,6 +77,12 @@ type Match struct {
 	zoneShrink      bool
 	zoneShrinkStart time.Time
 	zoneLastDmg     time.Time // last out-of-zone damage tick (2s cadence)
+	// BR safe-zone stages are separate from the CS round zone. The client receives
+	// one cmd-117 transition per stage and the server applies damage against the
+	// same interpolated radius.
+	brZoneStage   byte
+	brZoneNext    time.Time
+	brZoneClosing bool
 
 	// Multiplayer death rules (Step 5): per-entity lifecycle + live knock records, keyed like
 	// m.hp so humans and the bot are handled uniformly. lastTeamFell / roundOver drive round-end.
@@ -771,7 +777,8 @@ func (m *Match) maybeBeginBattleRoyaleGameplay() {
 			p.giveLoadout(true)
 		}
 	}
-	m.startZone()
+	m.seedBattleRoyaleWorld()
+	m.startBattleRoyaleZone()
 	log.Printf("[mm-udp] Battle Royale gameplay started: match=%d map=%d ranked=%v ready=%d/%d",
 		m.matchID, m.mapID, m.s.player.MatchMode == 2, ready, len(m.players))
 }
@@ -819,7 +826,7 @@ func (m *Match) runBattleRoyale() {
 				m.s.sweepWalls()
 				lastStream = now
 			}
-			m.stepZone(now)
+			m.stepBattleRoyaleZone(now)
 			m.sweepDisconnects(now)
 			m.stepKnock(now)
 			m.stepRescue(now)
