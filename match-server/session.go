@@ -45,11 +45,12 @@ type session struct {
 	// disconnectedAt are the sweep's own state (run() goroutine only): a client that goes silent past
 	// disconnectTimeout is flagged, and if it doesn't reconnect within reconnectGrace its frozen pawn is
 	// removed so the round can resolve and others stop seeing it stuck outside the zone.
-	lastSeen       atomic.Int64
-	lastAction     atomic.Int64 // last gameplay input; transport pings/ACKs do not keep an AFK pawn alive
-	disconnected   bool
-	disconnectedAt time.Time
-	afkEliminated  bool
+	lastSeen         atomic.Int64
+	lastAction       atomic.Int64 // last gameplay input; transport pings/ACKs do not keep an AFK pawn alive
+	disconnected     bool
+	disconnectedAt   time.Time
+	afkEliminated    bool
+	battleSceneReady bool // BR cmd-110 reconnect completed; subsequent reconnects preserve the live position
 
 	// Allocated per-participant ids (Step 4b, via Match.allocSlot): entity id = team<<24 | slot,
 	// PRI RepID, CS faction, team (the entity hibyte), and roster slot. For the first human these

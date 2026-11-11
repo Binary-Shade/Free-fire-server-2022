@@ -223,6 +223,7 @@ services:
       REDIS_URL: redis://redis:6379
       NODE_ID: ${NODE_ID:-match-1}
       MATCH_JWT_SECRET: ${MATCH_JWT_SECRET:?set MATCH_JWT_SECRET in .env}
+      MATCH_BR_LOBBY_SEC: ${MATCH_BR_LOBBY_SEC:-20}
       # This instance's PUBLIC host:port (what the client dials). Empty => not registered
       # in the fleet (the matchmaker uses its static address). Single instance: set it to
       # MATCH_PUBLIC_HOST:GAME_SERVER_PORT.

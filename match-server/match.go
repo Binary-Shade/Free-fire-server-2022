@@ -30,32 +30,35 @@ type Match struct {
 	done       chan struct{}
 
 	// Shared world state (moved off the session in Step 4a — the whole match sees ONE of each).
-	round        int           // 1-based CS round
-	teamScore    [2]uint8      // rounds won: [0]=local (faction 0), [1]=enemy (faction 1)
-	lossStreak   [2]uint8      // consecutive rounds LOST per team (drives the CS loss-bonus ladder)
-	firstBlood   uint32        // entity that got THIS round's first cross-team kill (0 = none yet); reset each round in endFight
-	reseedCount  int           // how many times the cmd-101 roster has been re-emitted for the replay recording (see reseedJoinBurst)
-	lastReseed   time.Time     // throttle marker for the reseed window
-	wheelKicked  bool          // whether the one-shot replay weapon-wheel kick (cmd-108 on-hand toggle) has fired (see kickObserverWheel)
-	settings     matchSettings // per-match CS config (round count / economy); defaults + custom-room overrides
-	mapID        uint32
-	gameMode     uint32
-	matchID      uint64
-	training     bool       // Alpha Island Training Grounds: persistent, without the CS state machine
-	battleRoyale bool       // Classic/ranked BR: one continuous life, no CS shop or round resets
-	matchStart   time.Time  // CS clock origin (phase countdowns read param - secondsSinceMatchStart)
-	tpSeq        uint32     // force-teleport token sequence (round-transition repositions)
-	arena        csArena    // spawn city for the current round (re-picked each round)
-	bot          joinPlayer // the current-round enemy bot (becomes a roster *player in 4c)
-	botEntity    uint32     // the (fixed) enemy bot entity id
-	bots         []*botAgent
-	botOptions   botSettings
-	botAI        *botAgent         // server-controlled movement/combat state for the filler bot
-	botRunState  byte              // learned from a real moving player's cmd-1001 state byte
-	hp           map[uint32]uint16 // entity id -> current HP (player + bot); splits to per-player in 4c
-	kills        map[uint32]uint16 // entity id -> match kill count (scoreboard, PRI field 10)
-	deaths       map[uint32]uint16 // entity id -> match death count (PRI field 29)
-	damage       map[uint32]uint32 // entity id -> total damage dealt (PRI field 31)
+	round              int           // 1-based CS round
+	teamScore          [2]uint8      // rounds won: [0]=local (faction 0), [1]=enemy (faction 1)
+	lossStreak         [2]uint8      // consecutive rounds LOST per team (drives the CS loss-bonus ladder)
+	firstBlood         uint32        // entity that got THIS round's first cross-team kill (0 = none yet); reset each round in endFight
+	reseedCount        int           // how many times the cmd-101 roster has been re-emitted for the replay recording (see reseedJoinBurst)
+	lastReseed         time.Time     // throttle marker for the reseed window
+	wheelKicked        bool          // whether the one-shot replay weapon-wheel kick (cmd-108 on-hand toggle) has fired (see kickObserverWheel)
+	settings           matchSettings // per-match CS config (round count / economy); defaults + custom-room overrides
+	mapID              uint32
+	gameMode           uint32
+	matchID            uint64
+	training           bool       // Alpha Island Training Grounds: persistent, without the CS state machine
+	battleRoyale       bool       // Classic/ranked BR: one continuous life, no CS shop or round resets
+	battleStartSent    bool       // cmd 110 emitted on the waiting-island connection (never repeat after scene reconnect)
+	battleSceneStarted bool       // at least one cmd-110 reconnect completed and grounded BR simulation started
+	battleStartAt      time.Time  // transition timestamp; bounds how long a slow peer can hold scene startup
+	matchStart         time.Time  // CS clock origin (phase countdowns read param - secondsSinceMatchStart)
+	tpSeq              uint32     // force-teleport token sequence (round-transition repositions)
+	arena              csArena    // spawn city for the current round (re-picked each round)
+	bot                joinPlayer // the current-round enemy bot (becomes a roster *player in 4c)
+	botEntity          uint32     // the (fixed) enemy bot entity id
+	bots               []*botAgent
+	botOptions         botSettings
+	botAI              *botAgent         // server-controlled movement/combat state for the filler bot
+	botRunState        byte              // learned from a real moving player's cmd-1001 state byte
+	hp                 map[uint32]uint16 // entity id -> current HP (player + bot); splits to per-player in 4c
+	kills              map[uint32]uint16 // entity id -> match kill count (scoreboard, PRI field 10)
+	deaths             map[uint32]uint16 // entity id -> match death count (PRI field 29)
+	damage             map[uint32]uint32 // entity id -> total damage dealt (PRI field 31)
 
 	// Shared world objects: placed gloo walls (FIFO, walls[0] oldest) + ground-loot boxes.
 	walls           []*iceWall
@@ -495,12 +498,16 @@ func (m *Match) admitLater(s *session) {
 		}
 	}
 
-	m.bindAll()         // everyone re-binds so the cmd 900 PRI routes the new RepID
-	s.giveLoadout(true) // the joiner's starting loadout (USP + medkits + attachments + coins)
+	m.bindAll() // everyone re-binds so the cmd 900 PRI routes the new RepID
+	if !m.battleRoyale || m.battleSceneStarted {
+		s.giveLoadout(true) // delayed in BR until cmd 110 has loaded the battle scene
+	}
 	if !m.battleRoyale {
 		s.sendCSShop()
-	} // BR has world loot, never the CS buy panel
-	s.broadcastZone() // draw the current safe zone for the joiner
+		s.broadcastZone()
+	} else if m.battleSceneStarted {
+		s.broadcastZone() // BR has no zone while still on the waiting island
+	}
 	log.Printf("[mm-udp] admitted player slot=%d ent=%#08x (roster=%d) %v", s.slot, s.entityID, len(m.players), s.remote)
 }
 
@@ -561,6 +568,12 @@ func (m *Match) resumeTransport(s, incoming *session) {
 
 func (m *Match) resumePlayer(s, incoming *session) {
 	m.replaceTransport(s, incoming)
+	enteringBattleScene := m.battleRoyale && m.battleStartSent && !s.battleSceneReady
+	if enteringBattleScene {
+		s.battleSceneReady = true
+		battleRoyaleGroundSpawn(&s.player)
+		s.playerPos = s.player.SpawnPos
+	}
 
 	s.sendDataLog(packet.CmdJoinMatchRes,
 		message.JoinMatchRes(0, m.settings.roomSetting, m.settings.roomSetting2),
@@ -607,6 +620,9 @@ func (m *Match) resumePlayer(s, incoming *session) {
 	s.sendVarSelf(packet.CmdPRISync, m.priPayload())
 	m.streamStateTo(s)
 	m.streamClockTo(s)
+	if enteringBattleScene {
+		m.maybeBeginBattleRoyaleGameplay()
+	}
 	log.Printf("[mm-udp] reconnect restored uid=%d match=%d ent=%#x phase=%d round=%d addr=%v",
 		s.player.AccountID, m.matchID, s.entityID, m.phase, m.round, s.remote)
 }
@@ -696,19 +712,79 @@ func (m *Match) run() {
 	}
 }
 
-// runBattleRoyale is the grounded BR foundation used by Classic and Ranked.
-// The client loads its native BR scene from map/game/match ids; the server owns
-// roster, combat, loot, movement, safe-zone damage and last-team-standing end.
-// Plane/airdrop sequencing can be layered on this loop without sharing CS phases.
-func (m *Match) runBattleRoyale() {
-	m.started = true
-	m.bindAll()
-	m.streamClock()
+const brSceneReconnectGrace = 15 * time.Second
+
+// startBattleRoyaleSceneLoad is the waiting-island -> Bermuda edge. Cmd 110 makes
+// this client call LoadMPBattleGame(CREATE_NEW_CONN); the new cmd-440 connection is
+// then reclaimed by MatchManager.resume. Repeating cmd 110 on that connection
+// reloads the scene forever, so this edge is explicitly one-shot per match.
+func (m *Match) startBattleRoyaleSceneLoad(now time.Time) {
+	if m.battleStartSent {
+		return
+	}
+	m.battleStartSent = true
+	m.battleStartAt = now
+	m.started = true // lock admission; scene reconnects reclaim their existing pawn
+	key := fmt.Sprintf("battle_start_%03d", m.matchID)
 	for _, p := range m.players {
-		p.giveLoadout(true)
+		p.sendDataLog(packet.CmdBattleStart, message.BattleStart(key, m.matchID, m.matchID),
+			fmt.Sprintf("cmd=110 BattleStart key=%q room=%d battle=%d", key, m.matchID, m.matchID))
+	}
+	log.Printf("[mm-udp] BR waiting island complete: cmd=110 sent match=%d players=%d", m.matchID, len(m.players))
+}
+
+func (m *Match) allBattleScenesReady() bool {
+	if len(m.players) == 0 {
+		return false
+	}
+	for _, p := range m.players {
+		if !p.battleSceneReady {
+			return false
+		}
+	}
+	return true
+}
+
+// maybeBeginBattleRoyaleGameplay starts simulation only after a cmd-110 scene
+// reconnect. Inventory, zone, and PRI packets sent to the old waiting-island
+// connection are discarded during LoadMPBattleGame, which caused empty/stuck BR.
+func (m *Match) maybeBeginBattleRoyaleGameplay() {
+	if m.battleSceneStarted || !m.battleStartSent {
+		return
+	}
+	if !m.allBattleScenesReady() && time.Since(m.battleStartAt) < brSceneReconnectGrace {
+		return
+	}
+	ready := 0
+	for _, p := range m.players {
+		if p.battleSceneReady {
+			ready++
+		}
+	}
+	if ready == 0 {
+		return
+	}
+	m.battleSceneStarted = true
+	m.bindAll()
+	for _, p := range m.players {
+		if p.battleSceneReady {
+			p.giveLoadout(true)
+		}
 	}
 	m.startZone()
-	log.Printf("[mm-udp] Battle Royale started: match=%d map=%d ranked=%v players=%d", m.matchID, m.mapID, m.s.player.MatchMode == 2, len(m.players))
+	log.Printf("[mm-udp] Battle Royale gameplay started: match=%d map=%d ranked=%v ready=%d/%d",
+		m.matchID, m.mapID, m.s.player.MatchMode == 2, ready, len(m.players))
+}
+
+// runBattleRoyale owns both the waiting island and the grounded BR simulation.
+// The plane/airdrop protocol can later replace brBattleGroundSpawn without
+// changing the required one-shot cmd-110 scene handoff.
+func (m *Match) runBattleRoyale() {
+	m.bindAll()
+	m.streamClock()
+	lobbyEnd := time.Now().Add(cfg.brLobbyDuration)
+	log.Printf("[mm-udp] Battle Royale waiting island: match=%d map=%d players=%d duration=%v",
+		m.matchID, m.mapID, len(m.players), cfg.brLobbyDuration)
 	t := time.NewTicker(baseTick)
 	defer t.Stop()
 	lastStream, lastClock := time.Time{}, time.Now()
@@ -721,6 +797,22 @@ func (m *Match) runBattleRoyale() {
 		case now := <-t.C:
 			if len(m.players) == 0 {
 				return
+			}
+			if !m.battleStartSent && !now.Before(lobbyEnd) {
+				m.startBattleRoyaleSceneLoad(now)
+			}
+			if m.battleStartSent && !m.battleSceneStarted {
+				m.maybeBeginBattleRoyaleGameplay()
+			}
+			if !m.battleSceneStarted {
+				// Keep the client clock and disconnect bookkeeping alive while it
+				// waits on the island or reloads onto its second UDP connection.
+				m.sweepDisconnects(now)
+				if now.Sub(lastClock) >= clockTick {
+					m.streamClock()
+					lastClock = now
+				}
+				continue
 			}
 			if now.Sub(lastStream) >= priTick {
 				m.s.sendVar(packet.CmdPRISync, m.priPayload(), 1)

@@ -48,6 +48,11 @@ func v(x, y, z float64) message.Vec3 { return message.Vec3{X: x, Y: y, Z: z} }
 var (
 	brWaitingLobbySpawn  = v(0, 14.243206, 0)
 	brWaitingLobbyFacing = v(0, 0, 1)
+	// Until the plane protocol is implemented, enter Bermuda on a verified
+	// walkable Factory spawn. This is applied only after cmd 110 has loaded the
+	// battle scene; reusing the waiting-island origin here leaves the pawn off-map.
+	brBattleGroundSpawn  = v(366.6, 15.9, -261.5)
+	brBattleGroundFacing = faceToward(brBattleGroundSpawn, v(477.7, 15.9, -250.6))
 )
 
 func battleRoyaleWaitingSpawn(pl *joinPlayer) {
@@ -56,6 +61,10 @@ func battleRoyaleWaitingSpawn(pl *joinPlayer) {
 		return
 	}
 	pl.SpawnPos, pl.SpawnFace = brWaitingLobbySpawn, brWaitingLobbyFacing
+}
+
+func battleRoyaleGroundSpawn(pl *joinPlayer) {
+	pl.SpawnPos, pl.SpawnFace = brBattleGroundSpawn, brBattleGroundFacing
 }
 
 // csArenas: 12 cities, each a pair of opposing gate fences (world meters).
