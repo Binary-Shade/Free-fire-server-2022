@@ -48,13 +48,13 @@ func v(x, y, z float64) message.Vec3 { return message.Vec3{X: x, Y: y, Z: z} }
 var (
 	brWaitingLobbySpawn  = v(0, 14.243206, 0)
 	brWaitingLobbyFacing = v(0, 0, 1)
-	// Bermuda's BR scene uses the level16 coordinate space (the old Factory
-	// CS fence coordinates are a different map). Until the aircraft packet is
-	// wired, use a walkable Bermuda pickup region as the deterministic fallback.
-	// Keeping this point in the BR scene is important: a CS Factory coordinate
-	// makes the client appear outside the map after cmd 110.
-	brBattleGroundSpawn  = v(-1160.268, 13.200094, -531.003)
-	brBattleGroundFacing = faceToward(brBattleGroundSpawn, v(-1023.82, 34.410816, 166.15))
+	// Until the aircraft/airdrop packet is wired, use the Factory surface that
+	// was verified with the 1.70 client after cmd 110. The level16 coordinate
+	// candidate previously used here belongs to a different scene transform and
+	// placed the pawn below/outside the loaded Bermuda terrain.
+	brBattleGroundSpawn  = v(366.6, 15.9, -261.5)
+	brBattleGroundFacing = faceToward(brBattleGroundSpawn, v(477.7, 15.9, -250.6))
+	brBattleAirHeight    = 220.0
 )
 
 func battleRoyaleWaitingSpawn(pl *joinPlayer) {
@@ -67,6 +67,16 @@ func battleRoyaleWaitingSpawn(pl *joinPlayer) {
 
 func battleRoyaleGroundSpawn(pl *joinPlayer) {
 	pl.SpawnPos, pl.SpawnFace = brBattleGroundSpawn, brBattleGroundFacing
+}
+
+// battleRoyaleAirSpawn is the compatibility entry point used immediately after
+// the BR scene reconnect. The retail client accepts the same authoritative
+// position packet used for reconnects, with physics state 2 interpreted as its
+// parachute state. The server later sends the ground spawn once the drop timer
+// expires. This does not fabricate the aircraft entity or its cutscene packet.
+func battleRoyaleAirSpawn(pl *joinPlayer) {
+	pl.SpawnPos = v(brBattleGroundSpawn.X, brBattleAirHeight, brBattleGroundSpawn.Z)
+	pl.SpawnFace = brBattleGroundFacing
 }
 
 // csArenas: 12 cities, each a pair of opposing gate fences (world meters).

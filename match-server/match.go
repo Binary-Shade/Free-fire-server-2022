@@ -46,6 +46,8 @@ type Match struct {
 	battleStartSent    bool       // cmd 110 emitted on the waiting-island connection (never repeat after scene reconnect)
 	battleSceneStarted bool       // at least one cmd-110 reconnect completed and grounded BR simulation started
 	battleStartAt      time.Time  // transition timestamp; bounds how long a slow peer can hold scene startup
+	brDropStartedAt    time.Time  // start of the compatibility parachute descent
+	brDropLanded       bool       // landing teleport has been emitted for this BR scene
 	matchStart         time.Time  // CS clock origin (phase countdowns read param - secondsSinceMatchStart)
 	tpSeq              uint32     // force-teleport token sequence (round-transition repositions)
 	arena              csArena    // spawn city for the current round (re-picked each round)
@@ -577,7 +579,7 @@ func (m *Match) resumePlayer(s, incoming *session) {
 	enteringBattleScene := m.battleRoyale && m.battleStartSent && !s.battleSceneReady
 	if enteringBattleScene {
 		s.battleSceneReady = true
-		battleRoyaleGroundSpawn(&s.player)
+		battleRoyaleAirSpawn(&s.player)
 		s.playerPos = s.player.SpawnPos
 	}
 
@@ -772,6 +774,7 @@ func (m *Match) maybeBeginBattleRoyaleGameplay() {
 	}
 	m.battleSceneStarted = true
 	m.bindAll()
+	m.startBattleRoyaleDrop(time.Now())
 	for _, p := range m.players {
 		if p.battleSceneReady {
 			p.giveLoadout(true)
@@ -821,6 +824,7 @@ func (m *Match) runBattleRoyale() {
 				}
 				continue
 			}
+			m.stepBattleRoyaleDrop(now)
 			if now.Sub(lastStream) >= priTick {
 				m.s.sendVar(packet.CmdPRISync, m.priPayload(), 1)
 				m.s.sweepWalls()

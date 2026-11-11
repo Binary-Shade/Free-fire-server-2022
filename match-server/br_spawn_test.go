@@ -26,6 +26,29 @@ func TestBattleRoyaleWaitingSpawnUsesExtractedLobbySurface(t *testing.T) {
 	}
 }
 
+func TestBattleRoyaleGroundSpawnUsesVerifiedSurface(t *testing.T) {
+	pl := joinPlayer{}
+	battleRoyaleGroundSpawn(&pl)
+	want := (message.Vec3{X: 366.6, Y: 15.9, Z: -261.5})
+	if pl.SpawnPos != want {
+		t.Fatalf("ground spawn=%+v want %+v", pl.SpawnPos, want)
+	}
+	if pl.SpawnFace != faceToward(want, message.Vec3{X: 477.7, Y: 15.9, Z: -250.6}) {
+		t.Fatalf("ground facing=%+v", pl.SpawnFace)
+	}
+}
+
+func TestBattleRoyaleAirSpawnKeepsVerifiedSurfaceXZ(t *testing.T) {
+	pl := joinPlayer{}
+	battleRoyaleAirSpawn(&pl)
+	if pl.SpawnPos.X != brBattleGroundSpawn.X || pl.SpawnPos.Z != brBattleGroundSpawn.Z {
+		t.Fatalf("air spawn=%+v does not align with ground=%+v", pl.SpawnPos, brBattleGroundSpawn)
+	}
+	if pl.SpawnPos.Y != brBattleAirHeight {
+		t.Fatalf("air height=%.2f want %.2f", pl.SpawnPos.Y, brBattleAirHeight)
+	}
+}
+
 func TestBattleRoyaleStartLeavesWaitingIslandExactlyOnce(t *testing.T) {
 	out := &Writer{ch: make(chan outItem, 2)}
 	s := &session{out: out, player: joinPlayer{AccountID: 77}}
