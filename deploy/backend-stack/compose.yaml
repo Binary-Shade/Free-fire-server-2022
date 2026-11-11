@@ -111,6 +111,7 @@ services:
       NODE_ID: backend-stack-match-1
       MATCH_JWT_SECRET: ${MATCH_JWT_SECRET}
       MATCH_ADVERTISE: ${PUBLIC_HOST}:10100
+      MATCH_BR_LOBBY_SEC: ${MATCH_BR_LOBBY_SEC:-20}
     ports: ["10100:10100/udp"]
     depends_on:
       backend-stack-redis:
