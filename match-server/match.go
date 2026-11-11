@@ -417,6 +417,11 @@ func (m *Match) setupMatch(s *session) {
 		s.player.SpawnPos = trainingSpawn
 		s.player.SpawnFace = trainingFacing
 		s.playerPos = s.player.SpawnPos
+	} else if m.battleRoyale {
+		// Classic loads PVP_WaitingIsland before the flight. Its spawn region is
+		// unrelated to Bermuda's CS fence transforms.
+		battleRoyaleWaitingSpawn(&s.player)
+		s.playerPos = s.player.SpawnPos
 	} else {
 		m.arena = choosePlayerSpawn(&s.player, m.arenasUsed)
 		m.arenasUsed[m.arena] = true
@@ -425,7 +430,7 @@ func (m *Match) setupMatch(s *session) {
 	// choosePlayerSpawn placed the first player at the LEFT fence (localFaction=0); once addPlayer has
 	// assigned the real faction (a room can put a team-2 player in first), re-anchor to the correct
 	// fence — matching admitLater. Skipped under the fixed-spawn test override (empty arena).
-	if !m.training && cfg.spawn == nil {
+	if !m.training && !m.battleRoyale && cfg.spawn == nil {
 		s.player.SpawnPos, s.player.SpawnFace = m.arena.spawnFor(s.faction)
 		s.playerPos = s.player.SpawnPos
 	}
@@ -443,7 +448,13 @@ func (m *Match) setupMatch(s *session) {
 // a cmd 101 for the joiner; then everyone re-binds and the joiner sees the zone.
 func (m *Match) admitLater(s *session) {
 	m.addPlayer(s)
-	s.player.SpawnPos, s.player.SpawnFace = m.arena.spawnFor(s.faction)
+	if m.battleRoyale {
+		battleRoyaleWaitingSpawn(&s.player)
+	} else if m.training {
+		s.player.SpawnPos, s.player.SpawnFace = trainingSpawn, trainingFacing
+	} else {
+		s.player.SpawnPos, s.player.SpawnFace = m.arena.spawnFor(s.faction)
+	}
 	s.playerPos = s.player.SpawnPos
 	m.hp[s.entityID] = m.settings.maxHP
 	m.life[s.entityID] = lifeAlive

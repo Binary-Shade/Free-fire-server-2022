@@ -40,6 +40,24 @@ type csArena struct {
 
 func v(x, y, z float64) message.Vec3 { return message.Vec3{X: x, Y: y, Z: z} }
 
+// Classic's pre-match scene is PVP_WaitingIsland (SceneHierarchyObject/level4.glb).
+// Its two PlayerSpawnRegion objects are rooted at world origin. A vertical mesh
+// probe through that origin hits the walkable Hur_Ground_02 surface at Y=14.243206.
+// Keep this separate from csArenas: those transforms belong to Bermuda's Contra
+// Squad fences and place a Classic player outside the waiting island.
+var (
+	brWaitingLobbySpawn  = v(0, 14.243206, 0)
+	brWaitingLobbyFacing = v(0, 0, 1)
+)
+
+func battleRoyaleWaitingSpawn(pl *joinPlayer) {
+	if cfg.spawn != nil {
+		pl.SpawnPos, pl.SpawnFace = *cfg.spawn, cfg.spawnFace
+		return
+	}
+	pl.SpawnPos, pl.SpawnFace = brWaitingLobbySpawn, brWaitingLobbyFacing
+}
+
 // csArenas: 12 cities, each a pair of opposing gate fences (world meters).
 var csArenas = []csArena{
 	{"factory", 0, v(366.6, 15.9, -261.5), v(477.7, 15.9, -250.6)},
