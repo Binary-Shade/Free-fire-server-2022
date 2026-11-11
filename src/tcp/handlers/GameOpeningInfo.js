@@ -13,55 +13,15 @@
  */
 
 const { EProtocol, EMatchmaking } = require('../protocol');
-
-// Currently open game modes. Add entries here to open more.
-const OPEN_MODES = [
-  {
-    map_id: 7,
-    game_mode: 23,
-    match_mode: 1,
-    sort_id: 2,
-    start_time: "00:00",
-    end_time: "23:59",
-    is_new: false,
-    is_live_open: true,
-    config_start_time: "2020-01-01 00:00:00",
-    config_end_time: "2030-12-31 23:59:59",
-    weekday: "1;2;3;4;5;6;7",
-    tips: "Permanent",
-    language: "en",
-    limited_count: 0,
-    tag: 0,
-    difficulty: "0"
-  },
-  { 
-    map_id: 1, 
-    game_mode: 15,
-    match_mode: 1, 
-    sort_id: 1, 
-    start_time: "00:00",
-    end_time: "23:59",
-    is_new: true,
-    is_live_open: true,
-    config_start_time: "2020-01-01 00:00:00",
-    config_end_time: "2030-12-31 23:59:59",
-    weekday: "1;2;3;4;5;6;7",
-    tips: "Permanent",
-    language: "en",
-    limited_count: 0,
-    tag: 1,
-    difficulty: "1",
-    visual_map: "https://foices.github.io/minhas_resources/contra_squad.png"
-  }
-];
+const gameModes = require('../../../config/game-mode-settings');
 
 function handler(reqObj, ctx) {
   ctx.logger.info(
     `[tcp] GameOpeningInfo region="${reqObj.region || ''}" lang="${reqObj.language || ''}" ` +
-    `-> ${OPEN_MODES.length} open mode(s)`
+    `-> ${gameModes.openingInfo().length} open mode(s)`
   );
   return {
-    opening_info_list: { gameOpeningInfos: OPEN_MODES },
+    opening_info_list: { gameOpeningInfos: gameModes.openingInfo() },
     // server timezone offset (east of UTC) in seconds; only relevant to timed
     // events, of which we advertise none.
     timezone_offset_secs: -new Date().getTimezoneOffset() * 60

@@ -22,6 +22,7 @@ data/*.db-*
 data/*.mitm
 data/*.log
 data/*.err.log
+data/*.err
 data/lan-test/
 scratch_body.txt
 .cache/

@@ -4,6 +4,7 @@ const { EProtocol, EGroup, EGroupErr } = require('../protocol');
 const store = require('../groups');
 const matchmaker = require('../matchmaker');
 const { getRepo } = require('../../db/repo');
+const gameModes = require('../../../config/game-mode-settings');
 
 const LEAVE_NORMAL = 0;
 const LEAVE_OFFLINE = 1;
@@ -158,8 +159,11 @@ const routes = [
       group.state = 1;
       let mode = { map_id: Number(group.map_ids[0]) || 1, game_mode: Number(group.game_mode) || 15,
         match_mode: Number(group.match_mode) || 1, difficulty: Number(group.difficulty) || 0 };
-      if (Number(mode.game_mode) !== 15 && Number(mode.game_mode) !== 23) {
-        mode = { map_id: 1, game_mode: 15, match_mode: 1, difficulty: 0 };
+      if (!gameModes.keyFor(mode) || !gameModes.isEnabled(mode)) {
+        group.state = 0;
+        store.resetReady(group);
+        ctx.ret = EGroupErr.INVALIDGROUPMODE;
+        return {};
       }
       const ids = group.members.map(m => Number(m.account_id));
       const accounts = ids.map(id => group.accounts.get(id));

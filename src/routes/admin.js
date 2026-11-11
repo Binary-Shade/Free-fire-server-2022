@@ -39,6 +39,7 @@ const featureSwitches = require('../../config/feature-switches');
 const voiceSettings = require('../../config/voice-settings');
 const luckRoyale = require('../../config/luck-royale');
 const { lookup } = require('../protocol/protos');
+const gameModes = require('../../config/game-mode-settings');
 router.get('/api/luck-royale', (_req,res,next)=>{try{res.json({settings:luckRoyale.read()});}catch(e){next(e);}});
 router.put('/api/luck-royale', express.json({limit:'64kb'}), (req,res)=>{try{res.json({ok:true,settings:luckRoyale.save(req.body)});}catch(e){res.status(400).json({error:e.message});}});
 router.get('/api/feedback', (_req,res,next)=>{try{res.json({settings:feedback.read()});}catch(e){next(e);}});
@@ -72,6 +73,12 @@ router.put('/api/feature-switches/:key', express.json({limit:'2kb'}), (req,res)=
   catch(e) { res.status(400).json({error:e.message}); }
 });
 router.get('/feature-switches', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
+router.get('/api/game-modes', (_req,res,next)=>{try{res.json({modes:gameModes.list()});}catch(e){next(e);}});
+router.put('/api/game-modes/:key', express.json({limit:'2kb'}), (req,res)=>{
+  try { res.json({ok:true,mode:gameModes.set(req.params.key, req.body && req.body.enabled)}); }
+  catch(e) { res.status(400).json({error:e.message}); }
+});
+router.get('/game-modes', (_req,res)=>res.sendFile(path.join(__dirname,'..','..','public','admin-app','index.html')));
 router.get('/api/voice', (_req,res)=>res.json({settings:voiceSettings.publicSettings()}));
 router.put('/api/voice', express.json({limit:'8kb'}), (req,res)=>{
   try { res.json({ok:true,settings:voiceSettings.save(req.body)}); }

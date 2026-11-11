@@ -10,8 +10,9 @@
  * the matchmaker via MatchmakingSussNtf.
  */
 
-const { EProtocol, EMatchmaking } = require('../protocol');
+const { EProtocol, EMatchmaking, EMatchmakingErr } = require('../protocol');
 const matchmaker = require('../matchmaker');
+const gameModes = require('../../../config/game-mode-settings');
 
 function handler(reqObj, ctx) {
   let mode = {
@@ -20,12 +21,16 @@ function handler(reqObj, ctx) {
     match_mode: reqObj.match_mode || 1,
     difficulty: reqObj.difficulty || 0,
   };
-  // This client build needs a separate BR pregame/plane protocol that the
-  // realtime service does not implement yet. Reject stale BR selections left
-  // in client state instead of loading them at Clash Squad spawn coordinates.
-  if (Number(mode.game_mode) !== 15 && Number(mode.game_mode) !== 23) {
-    ctx.logger.warn(`[tcp] unsupported matchmaking mode=${mode.game_mode} map=${mode.map_id}; using Clash Squad`);
-    mode = { map_id: 1, game_mode: 15, match_mode: 1, difficulty: 0 };
+  const key = gameModes.keyFor(mode);
+  if (!key) {
+    ctx.ret = EMatchmakingErr.INVALIDGAMEMODE;
+    ctx.logger.warn(`[tcp] invalid matchmaking mode=${mode.game_mode} map=${mode.map_id}`);
+    return { map_ids: [mode.map_id], game_mode: mode.game_mode, difficulty: mode.difficulty, match_mode: mode.match_mode, avg_wait_time_sec: 0 };
+  }
+  if (!gameModes.isEnabled(mode)) {
+    ctx.ret = EMatchmakingErr.MAPNOTOPEN;
+    ctx.logger.info(`[tcp] disabled matchmaking mode=${key} uid=${ctx.account.uid}`);
+    return { map_ids: [mode.map_id], game_mode: mode.game_mode, difficulty: mode.difficulty, match_mode: mode.match_mode, avg_wait_time_sec: 0 };
   }
   matchmaker.enqueue(ctx.account, ctx.gateway, mode);
   ctx.logger.info(
