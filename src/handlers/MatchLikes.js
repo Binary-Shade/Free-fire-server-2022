@@ -15,7 +15,9 @@ async function handler(req, ctx) {
   if (matchId && fresh.length) {
     const accounts = await getRepo().getByIds(fresh);
     for (const account of accounts) {
-      account.likes = Math.max(0, Number(account.likes || account.liked || 0)) + 1;
+      // `likes` is the persistent counter. Use nullish fallback so a real zero
+      // is not replaced by the legacy `liked` display field.
+      account.likes = Math.max(0, Number(account.likes ?? account.liked ?? 0) || 0) + 1;
       await getRepo().save(account);
     }
     sender.match_likes_sent[matchId] = [...already, ...fresh].slice(0, 8);

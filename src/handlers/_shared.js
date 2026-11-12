@@ -110,6 +110,7 @@ function buildSelectedItems(acc) {
 function buildAccountInfoBasic(acc) {
   const si = acc.selected_items || {};
   const clan = acc.clan || {};
+  const likes = Math.max(0, Number(acc.likes ?? acc.liked ?? 0) || 0);
   return {
     account_id: acc.uid || acc.account_id || 0,
     account_type: acc.account_type || 0,
@@ -131,7 +132,7 @@ function buildAccountInfoBasic(acc) {
     badge_cnt: acc.ep_badge_count || 999,
     badge_id: acc.ep_badge_id || 1001000021,
     season_id: 1,
-    liked: 9999,
+    liked: likes,
     is_deleted: false,
     show_rank: true,
     last_login_at: acc.last_login_at ? Math.floor(acc.last_login_at / 1000) : 0,
@@ -148,6 +149,7 @@ function buildAccountInfoBasic(acc) {
  */
 function accountToBasic(acc) {
   const si = acc.selected_items || {};
+  const likes = Math.max(0, Number(acc.likes ?? acc.liked ?? 0) || 0);
   return {
     account_id: acc.uid,
     account_type: acc.account_type || 0,
@@ -169,7 +171,7 @@ function accountToBasic(acc) {
     badge_cnt: acc.ep_badge_count || 0,
     badge_id: acc.ep_badge_id || 0,
     season_id: 1,
-    liked: 0,
+    liked: likes,
     is_deleted: false,
     show_rank: true,
     last_login_at: acc.last_login_at ? Math.floor(acc.last_login_at / 1000) : 0,
