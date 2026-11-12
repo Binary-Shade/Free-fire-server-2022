@@ -1,9 +1,23 @@
 'use strict';
 
 const crypto = require('crypto');
+const protobuf = require('protobufjs');
+const path = require('path');
 const { requireAccount } = require('./_shared');
 
 const MAX_SETTINGS_BYTES = 256 * 1024;
+const DEFAULT_SETTINGS_VERSION = 'server-default-v1';
+
+function defaultSettingsBlob() {
+  // COW.SettingDetail.blood_mode uses 0=No Blood, 1=Black/Dark, 2=Red/Classic.
+  // Keep this payload intentionally small; the client merges it with its other
+  // local defaults, while the explicit blood value prevents the unwanted
+  // no-blood fallback on a first launch or a new device.
+  const root = new protobuf.Root();
+  root.loadSync(path.join(__dirname, '..', '..', 'protocol', 'protos', 'COW.proto'));
+  const type = root.lookupType('COW.SettingDetail');
+  return Buffer.from(type.encode(type.create({ bloodMode: 2 })).finish());
+}
 
 // Older clients sometimes omit the optional version field even though the
 // settings payload is valid. Rejecting those uploads makes preferences such as
@@ -30,7 +44,12 @@ function upload(req, ctx) {
 function download(req, ctx) {
   const account = requireAccount(ctx);
   const stored = account && account.cloud_settings;
-  if (!stored || !stored.settings) return { settings: Buffer.alloc(0), version: '', transfer_status: 1, is_compressed: false };
+  if (!stored || !stored.settings) {
+    return {
+      settings: defaultSettingsBlob(), version: DEFAULT_SETTINGS_VERSION,
+      transfer_status: 2, is_compressed: false
+    };
+  }
   // The client version is not a reliable cloud-revision identifier: two
   // devices on the same build can have different HUD blobs. Always return the
   // stored payload as a transfer so an explicit cloud download applies it even
@@ -42,7 +61,7 @@ function download(req, ctx) {
   };
 }
 
-module.exports = { MAX_SETTINGS_BYTES, normalizeVersion, endpoints: [
+module.exports = { MAX_SETTINGS_BYTES, DEFAULT_SETTINGS_VERSION, normalizeVersion, defaultSettingsBlob, endpoints: [
   { endpoint: 'QueryOrUploadSettingsInfo', reqType: 'CSPlayerSettingsReq', resType: 'CSSettingsTransferRes', handler: upload },
   { endpoint: 'QueryOrDownloadSettingsInfo', reqType: 'CSDownloadPlayerSettingsReq', resType: 'CSPlayerSettingsRes', handler: download },
 ] };
