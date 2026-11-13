@@ -24,6 +24,19 @@ func reconnectKey(payload []byte) string {
 // done by dispatch; route runs either inline (pre-match) or on run()'s goroutine (via the mailbox).
 // Each case is a thin delegate — the actual work lives in the handleXxx methods below.
 func (s *session) route(p *packet.Packet) {
+	// A client can keep retransmitting gameplay packets from a previous UDP
+	// session while the matchmaker is establishing a new token (especially
+	// after a server restart).  Those packets have no Match owner yet.  Drop
+	// them instead of entering handlers that require s.match; otherwise a
+	// harmless stale packet turns into a nil-pointer panic and prevents the
+	// real training handshake from completing.
+	if s.match == nil && p.Cmd != packet.CmdHello && p.Cmd != packet.CmdReconnect &&
+		p.Cmd != packet.CmdJoinMatchPrepare && p.Cmd != packet.CmdJoinMatchPost &&
+		p.Cmd != packet.CmdConfirmForceSync && p.Cmd != packet.CmdManualChallenge &&
+		p.Cmd != packet.CmdManualZoneEnterExit && p.Cmd != packet.CmdAddFakeTimesReq {
+		log.Printf("[mm-udp] pre-match packet dropped cmd=%d from=%v", p.Cmd, s.remote)
+		return
+	}
 	// Training interactions travel over the encrypted realtime UDP connection,
 	// outside the HTTP proxy. Keep a focused decoded trace so controlled client
 	// captures reveal the command and RUDP send-option/channel used by each UI
@@ -110,6 +123,12 @@ func (s *session) route(p *packet.Packet) {
 		s.handleAddFakeTimes(p)
 	case packet.CmdTrainingInit:
 		s.handleTrainingInit(p)
+	case packet.CmdTrainingStatus:
+		s.handleTrainingStatus(p)
+	case packet.CmdTrainingQuitZone:
+		// The client sends this when leaving an interaction volume. Echoing the
+		// state keeps the dynamic-prefab/interaction controller in sync.
+		s.handleTrainingStatus(p)
 	case packet.CmdTrainingCatalogReq:
 		s.handleTrainingCatalogReq(p)
 	case packet.CmdTrainingIntoPortal, packet.CmdTrainingEnterShop:
@@ -117,7 +136,15 @@ func (s *session) route(p *packet.Packet) {
 	case packet.CmdTrainingSelectItem:
 		s.handleTrainingSelectItem(p)
 	case packet.CmdTrainingRespawn:
-		s.handleTrainingRespawn(p)
+		// 1.70 uses 322 for respawn; later revisions reuse it for the shop
+		// exchange list. A respawn always starts with our entity id.
+		if len(p.Payload) >= 4 && binary.LittleEndian.Uint32(p.Payload[:4]) == s.entityID {
+			s.handleTrainingRespawn(p)
+		} else {
+			s.handleTrainingStatus(p)
+		}
+	case packet.CmdTrainingExchangeDone, packet.CmdTrainingEndCountdown, packet.CmdTrainingLineupResult:
+		s.handleTrainingStatus(p)
 	case packet.CmdTrainingExit:
 		log.Printf("[mm-udp] cmd=315 Training exit/finalize (%dB): %x", len(p.Payload), p.Payload)
 	default:
@@ -307,6 +334,11 @@ func (s *session) handleClientPos(p *packet.Packet) {
 func (s *session) handlePlayerQuit(p *packet.Packet) {
 	s.stopped.Store(true)
 	s.sendDataLog(packet.CmdPlayerQuitRes, message.PlayerQuit(1), fmt.Sprintf("cmd=192 PlayerQuit payload=%x", p.Payload))
+	if s.match == nil {
+		// A client can send a delayed quit after the match server was restarted.
+		// It has no roster to mutate, but still needs the quit acknowledgement.
+		return
+	}
 	s.match.clearFlag(s.entityID) // despawn the quitter's flag (it never auto-removes client-side)
 	s.match.removePlayer(s)       // drop from the roster; the match keeps running for the others
 }

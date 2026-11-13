@@ -13,44 +13,42 @@ const lobby = require('../../config/lobby-content');
 
 function handleLoginGetSplash(reqObj, ctx) {
   const t = nowSecs();
+  const banners = lobby.activeBanners(t);
   ctx.logger.info('[ported_6] LoginGetSplash');
   return {
     accouncement_res: {
-      announcements: [
-        {
+      announcements: banners.map((banner, index) => ({
           language: lobby.language,
-          order_in_this_language: 1,
-          title: lobby.banner.title,
-          image_url: lobby.banner.imageUrl,
+          order_in_this_language: index + 1,
+          title: banner.title,
+          image_url: banner.imageUrl,
           fb_page_id: '',
-          image_url_for_lobby: lobby.banner.imageUrl,
-          link_url: lobby.banner.linkUrl,
-          desc: lobby.banner.description,
-          start_time: t - 86400 * 30,
-          end_time: t + 86400 * 30,
+          image_url_for_lobby: banner.imageUrl,
+          link_url: banner.linkUrl,
+          desc: banner.description,
+          start_time: banner.startAt || t - 86400 * 30,
+          end_time: banner.endAt || t + 86400 * 365,
           region: lobby.region,
-          id: lobby.banner.id,
+          id: banner.id,
           use_embedded_browser: true
-        }
-      ]
+        }))
     },
     splash_res: {
-      splashBanners: [
-        {
+      splashBanners: banners.map((banner) => ({
           region: lobby.region,
           language: lobby.language,
-          id: lobby.banner.id,
-          name: lobby.banner.name,
-          sort_id: 1,
-          start_time: t - 86400 * 30,
-          end_time: t + 86400 * 30,
-          image_url: lobby.banner.imageUrl,
+          id: banner.id,
+          name: banner.name,
+          sort_id: banner.sortId,
+          start_time: banner.startAt || t - 86400 * 30,
+          end_time: banner.endAt || t + 86400 * 365,
+          image_url: banner.imageUrl,
           gos_pos: 1,
-          gos_url: lobby.banner.linkUrl,
+          gos_url: banner.linkUrl,
           use_embedded_browser: true,
           sub_go_pos: '',
           video_url: '',
-          bg_img_url: lobby.banner.imageUrl,
+          bg_img_url: banner.imageUrl,
           type: 0,
           platform: 0,
           weight: 1,
@@ -58,8 +56,7 @@ function handleLoginGetSplash(reqObj, ctx) {
           using_version: 0,
           active_phone_quality: 0,
           id_last_num: ''
-        }
-      ]
+        }))
     },
     activity_info_res: {
       activitys: [

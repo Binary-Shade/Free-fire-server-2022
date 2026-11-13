@@ -126,7 +126,10 @@ const (
 	CmdTrainingItemGranted   = 317
 	CmdTrainingSelectItem    = 318
 	CmdTrainingStatus        = 319
+	CmdTrainingQuitZone      = 321
 	CmdTrainingRespawn       = 322
+	CmdTrainingExchangeDone  = 325
+	CmdTrainingEndCountdown  = 332
 	CmdTrainingShowShop      = 323
 	CmdTrainingBuySuccess    = 324
 	CmdTrainingCatalogReq    = 326
@@ -134,6 +137,7 @@ const (
 	CmdTrainingEnterShop     = 334
 	CmdTrainingWorldReady    = 253
 	CmdTrainingReady         = 587
+	CmdTrainingLineupResult  = 588
 )
 
 var (

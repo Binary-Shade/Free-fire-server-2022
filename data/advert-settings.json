@@ -1,0 +1,20 @@
+{
+  "ads": [
+    {
+      "enabled": false,
+      "id": 20190712,
+      "type": 25,
+      "sortId": 2,
+      "language": "default",
+      "imageUrl": "https://res.cloudinary.com/dw6d0ejuv/image/upload/v1794469101/Yorak_Project__Neon_Grit_Banner_rzc8ex.png",
+      "startAt": 1553050800,
+      "endAt": 1868929199,
+      "goPos": 0,
+      "subType": 0,
+      "subGoPos": "",
+      "externalForOfficialWebsite": false,
+      "goToSwitch": false,
+      "smallStartTime": 0
+    }
+  ]
+}

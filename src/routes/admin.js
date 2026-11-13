@@ -40,6 +40,54 @@ const voiceSettings = require('../../config/voice-settings');
 const luckRoyale = require('../../config/luck-royale');
 const { lookup } = require('../protocol/protos');
 const gameModes = require('../../config/game-mode-settings');
+const advertSettings = require('../../config/advert-settings');
+const newPlayerRewards = require('../../config/new-player-rewards');
+const itemCatalog = require('../../config/item-catalog');
+function advertBase() {
+  return loginDescSettings.apply(loginDescBase).advert_res || { advert_items: [] };
+}
+router.get('/api/ads', (_req,res,next)=>{
+  try { res.json({ads:advertSettings.read(advertBase())}); } catch(e) { next(e); }
+});
+router.put('/api/ads', express.json({limit:'256kb'}), (req,res)=>{
+  try {
+    const ads=advertSettings.save(req.body&&req.body.ads);
+    verifyLoginDesc({...loginDescSettings.apply(loginDescBase),advert_res:advertSettings.protocolValue(advertBase())});
+    res.json({ok:true,ads});
+  } catch(e) { res.status(400).json({error:e.message}); }
+});
+router.get('/api/new-player-rewards', (_req,res,next)=>{
+  try { res.json({settings:newPlayerRewards.read(),awardTypes:Object.keys(newPlayerRewards.types)}); } catch(e) { next(e); }
+});
+router.put('/api/new-player-rewards', express.json({limit:'128kb'}), (req,res)=>{
+  try { res.json({ok:true,settings:newPlayerRewards.save(req.body)}); }
+  catch(e) { res.status(400).json({error:e.message}); }
+});
+router.get('/api/item-catalog', (req,res,next)=>{
+  try { res.json(itemCatalog.search(req.query.q, req.query.page, req.query.pageSize)); }
+  catch(e) { next(e); }
+});
+router.get('/api/item-catalog/icon/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return res.status(400).end();
+  const sources = [
+    `https://cdn.jsdelivr.net/gh/AfnanTawsif/ff-catalog@main/Item-icons/${id}.webp`,
+    `https://cdn.jsdelivr.net/gh/ShahGCreator/icon@main/PNG/${id}.png`,
+  ];
+  for (const source of sources) {
+    try {
+      const upstream = await fetch(source, { signal: AbortSignal.timeout(7000) });
+      if (!upstream.ok) continue;
+      const type = upstream.headers.get('content-type') || 'image/webp';
+      if (!type.startsWith('image/')) continue;
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      if (!bytes.length || bytes.length > 2 * 1024 * 1024) continue;
+      res.set('Content-Type', type).set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      return res.send(bytes);
+    } catch (_) { /* try the fallback source */ }
+  }
+  return res.status(404).end();
+});
 router.get('/api/luck-royale', (_req,res,next)=>{try{res.json({settings:luckRoyale.read()});}catch(e){next(e);}});
 router.put('/api/luck-royale', express.json({limit:'64kb'}), (req,res)=>{try{res.json({ok:true,settings:luckRoyale.save(req.body)});}catch(e){res.status(400).json({error:e.message});}});
 router.get('/api/feedback', (_req,res,next)=>{try{res.json({settings:feedback.read()});}catch(e){next(e);}});
@@ -162,13 +210,13 @@ router.post('/api/grants/:target', express.json({ limit: '4kb' }), async (req, r
 router.get('/api/capabilities', (_req, res) => res.json({
   live: ['online users', 'players in matches', 'active matches', 'match-server health', 'matchmaking queue'],
   players: ['lookup', 'nickname', 'role', 'kick', 'ban', 'unban'],
-  lobby: ['region', 'language', 'marquee messages', 'banner title', 'banner description', 'banner image', 'banner link', 'post-match feedback'],
+  lobby: ['region', 'language', 'marquee messages', 'banner title', 'banner description', 'banner image', 'banner link', 'advertisements', 'new-player rewards', 'post-match feedback'],
   gameplay: ['Training Grounds availability', 'Clash Squad', 'custom rooms', 'bot count', 'bot difficulty', 'bot purchasing', 'bot cover', 'bot revive', 'bot gloo walls']
 }));
 const maxImageBytes = 8 * 1024 * 1024;
 
 function publicContent() {
-  return { region: lobby.region, language: lobby.language, marquee: lobby.marquee, banner: lobby.banner };
+  return { region: lobby.region, language: lobby.language, marquee: lobby.marquee, banners: lobby.banners };
 }
 
 router.get('/api/content', (_req, res) => res.json(publicContent()));

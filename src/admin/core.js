@@ -158,28 +158,48 @@ class AdminCore {
     const accounts = all ? await this.repo.getAllAccounts() : [await this.repo.getById(Number(target))].filter(Boolean);
     if (!accounts.length) return { ok: false, error: all ? 'no accounts found' : 'player not found' };
     const grantId = String(input.grantId || `grant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`).slice(0, 100);
+    const title = String(input.title || 'A reward from the server').trim().slice(0, 120) || 'A reward from the server';
+    const message = String(input.message || 'Open this message and claim the attached reward.').trim().slice(0, 1000);
     let applied = 0, skipped = 0;
     for (const account of accounts) {
       account.admin_grants = Array.isArray(account.admin_grants) ? account.admin_grants : [];
       if (account.admin_grants.some((entry) => entry.id === grantId)) { skipped += 1; continue; }
-      if (kind === 'gems' || kind === 'coins') {
-        account[kind] = Number(account[kind] || 0) + amount;
-        account.wallet = account.wallet || {};
-        account.wallet[kind] = account[kind];
-      } else {
-        account.backpack = account.backpack || { items: [] };
-        account.backpack.items = Array.isArray(account.backpack.items) ? account.backpack.items : [];
-        const existing = account.backpack.items.find((item) => Number(item.id) === itemId);
-        if (existing) existing.cnt = Number(existing.cnt || 0) + amount;
-        else account.backpack.items.push({ id: itemId, cnt: amount, expire_time: 0, left_use_times: -1, history_owned_cnt: amount, item_status: 1 });
+      account.mails = Array.isArray(account.mails) ? account.mails : [];
+      const now = Date.now();
+      const mailId = now * 1000 + Math.floor(Math.random() * 1000);
+      const rewards = { items: [], coins: 0, gems: 0, exps: 0, activeness: 0, accelerators: 0 };
+      if (kind === 'gems' || kind === 'coins') rewards[kind] = amount;
+      else rewards.items.push({ id: itemId, cnt: amount, expire_time: 0, left_use_times: -1,
+        history_owned_cnt: amount, left_expire_time: 0, item_status: 1 });
+      account.mails.unshift({
+        mail_id: mailId,
+        type: 16,
+        title,
+        content: message,
+        sender_info: { sender_id: 0, sender_nick: 'Server' },
+        attachment: { rewards },
+        receive_time: Math.floor(now / 1000),
+        status: 0,
+        source: 1,
+        action_type: 0,
+        admin_grant_id: grantId,
+      });
+      // Keep enough history for active campaigns without allowing the account
+      // document to grow forever. Never discard an unclaimed attachment.
+      if (account.mails.length > 200) {
+        const pending = account.mails.filter((mail) => Number(mail.status || 0) === 0);
+        const processed = account.mails.filter((mail) => Number(mail.status || 0) !== 0).slice(0, Math.max(0, 200 - pending.length));
+        account.mails = [...pending, ...processed];
       }
-      account.admin_grants.push({ id: grantId, kind, amount, itemId: kind === 'item' ? itemId : 0, at: Date.now() });
+      account.admin_grants.push({ id: grantId, mailId, kind, amount, itemId: kind === 'item' ? itemId : 0, at: now, delivery: 'mail' });
       if (account.admin_grants.length > 100) account.admin_grants = account.admin_grants.slice(-100);
       await this.repo.save(account);
       this._publishUpdated(account.uid);
       applied += 1;
     }
-    const result = { ok: true, grantId, target: all ? 'all' : Number(target), kind, amount, itemId: kind === 'item' ? itemId : 0, applied, skipped };
+    const result = { ok: applied > 0, grantId, target: all ? 'all' : Number(target), kind, amount,
+      itemId: kind === 'item' ? itemId : 0, delivery: 'mail', applied, skipped };
+    if (!applied) result.error = 'This delivery ID was already sent to every selected player.';
     await this.audit('grant', all ? null : Number(target), result);
     return result;
   }

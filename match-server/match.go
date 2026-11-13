@@ -67,6 +67,7 @@ type Match struct {
 	wallSeq         uint32                // monotonic wall entity-id / PRI-RepID allocator (never reused)
 	containers      map[uint16]*container // live ground boxes keyed by ContainerObjectID
 	nextContainerID uint16                // runtime container-id allocator (runtimeContainerBase..Max)
+	trainingSeeded  bool
 	flags           map[uint32]flagObject // owner entityId -> live battle-flag object (1 per player; emote-planted, 60s server-despawn, see battleflag.go)
 	flagSeq         uint32                // monotonic flag object-id allocator (flagEntityBase band)
 
@@ -615,6 +616,9 @@ func (m *Match) resumePlayer(s, incoming *session) {
 		p.resendEquipTo(s)
 		p.resendAttachTo(s)
 	}
+	if m.training {
+		m.sendTrainingWorldInit(s)
+	}
 	if !m.training && !m.battleRoyale {
 		s.sendCSShop()
 	}
@@ -934,6 +938,10 @@ func (m *Match) runTraining() {
 				m.bindAll()
 				for _, p := range m.players {
 					p.giveLoadout(true)
+					// giveLoadout is also used by respawn/reset and can clear
+					// dynamic world objects. Replay the persistent training racks
+					// after the client has processed the starter inventory.
+					m.sendTrainingGroundState(p)
 				}
 				loadoutSent = true
 			}

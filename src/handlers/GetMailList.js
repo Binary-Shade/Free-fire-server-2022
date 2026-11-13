@@ -12,7 +12,8 @@ const { requireAccount } = require('./_shared');
 function handleGetMailList(reqObj, ctx) {
   const account = requireAccount(ctx);
   if (!account) return {};
-  const mails = (account.mails || []).map((m) => ({
+  const mails = (account.mails || []).filter((m) => Number(m.status || 0) !== 2).sort((a, b) =>
+    Number(b.receive_time || 0) - Number(a.receive_time || 0)).slice(0, 100).map((m) => ({
     mail_id: m.mail_id || 0,
     type: m.type || 0,
     title: m.title || '',

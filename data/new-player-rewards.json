@@ -1,0 +1,76 @@
+{
+  "enabled": true,
+  "expiryDays": 30,
+  "rewards": [
+    {
+      "day": 1,
+      "awards": [
+        {
+          "type": "item",
+          "itemId": 203000351,
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "awards": [
+        {
+          "type": "item",
+          "itemId": 203000348,
+          "amount": 1
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "awards": [
+        {
+          "type": "coins",
+          "itemId": 0,
+          "amount": 1000
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "awards": [
+        {
+          "type": "gems",
+          "itemId": 0,
+          "amount": 20
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "awards": [
+        {
+          "type": "coins",
+          "itemId": 0,
+          "amount": 1500
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "awards": [
+        {
+          "type": "gems",
+          "itemId": 0,
+          "amount": 30
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "awards": [
+        {
+          "type": "coins",
+          "itemId": 0,
+          "amount": 3000
+        }
+      ]
+    }
+  ]
+}

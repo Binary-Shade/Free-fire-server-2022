@@ -1,28 +1,497 @@
-import React,{useCallback,useEffect,useMemo,useState}from'react';
-import{NavLink,Navigate,Route,Routes,useLocation,useNavigate}from'react-router-dom';
-import{Activity,AlertTriangle,Bot,ChevronLeft,ChevronRight,Gamepad2,Gem,Gift,Image,LayoutDashboard,LogOut,Map as MapIcon,Menu,MessageSquare,Mic2,RefreshCw,Search,Settings2,ShieldCheck,Sparkles,ToggleLeft,UserRound,Users,X}from'lucide-react';
-import{api}from'./lib';import{Badge,Button,Card,CardHeader,Empty,Field,Input,Modal,Select,Skeleton,Switch,Textarea}from'./components';
-import Rewards from'./Rewards';
-import OverviewDashboard from'./OverviewDashboard';
-import PlayersDashboard from'./PlayersDashboard';
+import React, { useEffect, useRef, useState } from 'react';
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import {
+  Activity,
+  Bot,
+  Eye,
+  EyeOff,
+  Flame,
+  Gem,
+  Gift,
+  Image as ImageIcon,
+  LayoutDashboard,
+  LogOut,
+  Map as MapIcon,
+  Menu,
+  Mic2,
+  RefreshCw,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  ToggleLeft,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
+import { api, cn, initials } from './lib';
+import { Button, Field, Input, Notice, StatusDot, useToast } from './components';
+import Overview from './pages/Overview';
+import Players from './pages/Players';
+import Rewards from './pages/Rewards';
+import Lobby from './pages/Lobby';
+import Ads from './pages/Ads';
+import GameModes from './pages/GameModes';
+import Characters from './pages/Characters';
+import Bots from './pages/Bots';
+import Features from './pages/Features';
+import JsonSettings from './pages/JsonSettings';
+import ClientConfig from './pages/ClientConfig';
+import Voice from './pages/Voice';
 
-const nav=[['Overview','/',LayoutDashboard],['Players','/players',Users],['Player rewards','/rewards',Gift],['Lobby content','/lobby',Image],['Game modes','/game-modes',MapIcon],['Characters','/characters',UserRound],['Bots','/bots',Bot],['Feature switches','/features',ToggleLeft],['Luck Royale','/luck-royale',Gem],['Client configuration','/client-config',Settings2],['Voice chat','/voice',Mic2]];
-const titles=Object.fromEntries(nav.map(([a,b])=>[b,a]));
-function useRequest(loader,deps=[]){const[data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState('');const load=useCallback(async()=>{setLoading(true);setError('');try{setData(await loader())}catch(e){setError(e.message)}finally{setLoading(false)}},deps);useEffect(()=>{load()},[load]);return{data,setData,loading,error,reload:load}}
-function Notice({message,tone='good'}){if(!message)return null;return <div className={`rounded-lg border px-4 py-3 text-sm ${tone==='bad'?'border-red-500/20 bg-red-500/10 text-red-300':'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}>{message}</div>}
-function Login({onLogin,configured}){const[user,setUser]=useState('admin'),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');async function submit(e){e.preventDefault();setBusy(true);setError('');try{const d=await api('/auth/login',{method:'POST',body:JSON.stringify({username:user,password})});onLogin(d.user)}catch(e){setError(e.message)}finally{setBusy(false)}}return <main className="grid min-h-screen place-items-center p-5"><div className="w-full max-w-md"><div className="mb-7 flex items-center justify-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-lg font-black shadow-lg shadow-primary/20">S</div><div><div className="text-lg font-bold">Shade Control</div><div className="text-xs text-muted-foreground">Game server administration</div></div></div><Card><div className="p-6 sm:p-8"><div className="mb-6"><h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1><p className="mt-2 text-sm text-muted-foreground">Sign in to manage players, gameplay, and lobby content.</p></div>{!configured&&<Notice tone="bad" message="Admin login is not configured. Add ADMIN_PASSWORD to the server .env file and restart it."/>}<form className="mt-5 grid gap-4" onSubmit={submit}><Field label="Username"><Input autoComplete="username" value={user} onChange={e=>setUser(e.target.value)} required/></Field><Field label="Password"><Input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required autoFocus/></Field>{error&&<Notice tone="bad" message={error}/>}<Button className="mt-2 w-full" busy={busy}>Sign in</Button></form></div></Card><p className="mt-5 text-center text-xs text-muted-foreground">Protected administration area · Session expires after 12 hours</p></div></main>}
-function Shell({user,onLogout}){const[mobile,setMobile]=useState(false),location=useLocation();return <div className="app-shell min-h-screen lg:grid lg:grid-cols-[260px_1fr]"><aside className={`${mobile?'fixed':'hidden'} inset-y-0 left-0 z-40 w-[280px] border-r border-border bg-card/95 p-4 backdrop-blur-xl lg:sticky lg:top-0 lg:block lg:h-screen lg:w-auto`}><div className="flex h-14 items-center justify-between px-2"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-primary font-black">S</div><div><div className="font-bold">Shade Control</div><div className="text-[11px] text-muted-foreground">Operations console</div></div></div><button className="lg:hidden" onClick={()=>setMobile(false)}><X/></button></div><nav className="mt-6 grid gap-1">{nav.map(([label,to,Icon],i)=><React.Fragment key={to}>{(i===0||i===3||i===7)&&<div className="mb-1 mt-5 px-3 text-[10px] font-bold uppercase tracking-[.18em] text-muted-foreground">{i===0?'Operations':i===3?'Game management':'Advanced'}</div>}<NavLink end={to==='/'} to={to} onClick={()=>setMobile(false)} className={({isActive})=>`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${isActive?'bg-primary/12 text-primary':'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Icon className="h-[18px] w-[18px]"/>{label}</NavLink></React.Fragment>)}</nav><div className="absolute bottom-4 left-4 right-4 rounded-xl border border-border bg-background/50 p-3"><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,.1)]"/><span className="text-sm font-semibold">Connected</span></div><p className="mt-1 pl-4 text-xs text-muted-foreground">Live server controls</p></div></aside>{mobile&&<button aria-label="Close menu" className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={()=>setMobile(false)}/>}<div className="min-w-0"><header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:px-7"><div className="flex items-center gap-3"><button className="rounded-md p-2 hover:bg-muted lg:hidden" onClick={()=>setMobile(true)}><Menu className="h-5 w-5"/></button><div><h1 className="font-semibold">{titles[location.pathname]||'Administration'}</h1><p className="hidden text-xs text-muted-foreground sm:block">Manage changes safely from one place</p></div></div><div className="flex items-center gap-3"><div className="hidden text-right sm:block"><div className="text-sm font-semibold">{user}</div><div className="text-xs text-muted-foreground">Administrator</div></div><button onClick={onLogout} title="Sign out" className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"><LogOut className="h-4 w-4"/></button></div></header><main className="mx-auto max-w-[1500px] p-4 pb-16 sm:p-7"><Routes><Route path="/" element={<OverviewDashboard/>}/><Route path="/players" element={<PlayersDashboard/>}/><Route path="/rewards" element={<Rewards/>}/><Route path="/lobby" element={<Lobby/>}/><Route path="/game-modes" element={<GameModes/>}/><Route path="/characters" element={<Characters/>}/><Route path="/bots" element={<Bots/>}/><Route path="/features" element={<Features/>}/><Route path="/luck-royale" element={<JsonSettings title="Luck Royale" description="Configure draws, pools, prices, and availability." endpoint="/luck-royale" field="settings"/>}/><Route path="/client-config" element={<ClientConfig/>}/><Route path="/voice" element={<Voice/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes></main></div></div>}
-function Heading({title,description,action}){return <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-semibold tracking-tight">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>{action}</div>}
-function Metric({label,value,hint,icon:Icon,tone='blue'}){return <Card className="p-5"><div className="flex items-start justify-between"><span className="text-sm font-medium text-muted-foreground">{label}</span><span className={`rounded-lg p-2 ${tone==='green'?'bg-emerald-500/10 text-emerald-400':tone==='red'?'bg-primary/10 text-primary':'bg-blue-500/10 text-blue-400'}`}><Icon className="h-4 w-4"/></span></div><div className="mt-4 text-3xl font-bold tracking-tight">{value??'—'}</div><div className="mt-1 text-xs text-muted-foreground">{hint}</div></Card>}
-function Overview(){const{data,loading,error,reload}=useRequest(()=>api('/status?page=1&pageSize=10'),[]);const s=data?.stats;return <><Heading title="Server overview" description="A live view of players, matches, and infrastructure." action={<Button variant="secondary" onClick={reload}><RefreshCw className="h-4 w-4"/>Refresh</Button>}/>{error&&<Notice tone="bad" message={error}/>}<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{loading?[1,2,3,4].map(x=><Skeleton key={x} className="h-36"/>):<><Metric label="Online players" value={s.online} hint="Connected to the gateway" icon={Users} tone="green"/><Metric label="Players in game" value={s.inGame} hint={`${s.trainingPlayers||0} training · ${s.clashSquadPlayers||0} Clash Squad`} icon={Gamepad2}/><Metric label="Active matches" value={s.activeMatches} hint="Across all match nodes" icon={Activity} tone="red"/><Metric label="Matchmaking queue" value={s.queue} hint="Waiting for a match" icon={RefreshCw}/></>}</div><div className="mt-6 grid gap-5 xl:grid-cols-[1.45fr_1fr]"><Card><CardHeader title="Online now" description="Recently connected players" action={<NavLink className="text-sm font-semibold text-primary hover:underline" to="/players">View all</NavLink>}/><div className="divide-y divide-border">{data?.users?.length?data.users.map(u=><div key={u.uid} className="flex items-center justify-between px-5 py-3.5"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-muted font-bold">{(u.nickname||'P')[0]}</div><div><div className="text-sm font-semibold">{u.nickname}</div><div className="text-xs text-muted-foreground">UID {u.uid} · Level {u.level}</div></div></div><Badge tone="good">Online</Badge></div>):!loading&&<Empty icon={Users} title="No players online" description="Connected players will appear here automatically."/>}</div></Card><Card><CardHeader title="Infrastructure" description="Services reporting to the control plane"/><div className="grid gap-3 p-5"><Service name="Redis event bus" ok={s?.redis}/>{s?.matchTelemetry?.map(x=><Service key={x.node} name={x.node} ok detail={`${x.players} players · ${x.matches} matches`}/>)||null}{s&&!s.matchTelemetry?.length&&<p className="text-sm text-muted-foreground">No match nodes are reporting.</p>}</div></Card></div></>}
-function Service({name,ok,detail}){return <div className="flex items-center justify-between rounded-lg border border-border bg-background/40 p-3"><div><div className="text-sm font-semibold">{name}</div>{detail&&<div className="text-xs text-muted-foreground">{detail}</div>}</div><Badge tone={ok?'good':'bad'}>{ok?'Operational':'Offline'}</Badge></div>}
-function Players(){const[page,setPage]=useState(1),[size,setSize]=useState(20),[search,setSearch]=useState(''),[query,setQuery]=useState(''),[modal,setModal]=useState(null),[reason,setReason]=useState('Dashboard action'),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');useEffect(()=>{const t=setTimeout(()=>{setPage(1);setQuery(search)},300);return()=>clearTimeout(t)},[search]);const{data,loading,error,reload}=useRequest(()=>api(`/status?page=${page}&pageSize=${size}&search=${encodeURIComponent(query)}`),[page,size,query]);async function action(){setBusy(true);try{await api(`/players/${modal.uid}/${modal.action}`,{method:'POST',body:JSON.stringify({reason})});setNotice(`${modal.action==='ban'?'Ban':'Kick'} request completed for ${modal.nickname}.`);setModal(null);reload()}catch(e){setNotice(e.message)}finally{setBusy(false)}}return <><Heading title="Players" description="Find connected accounts and handle moderation actions." action={<Button variant="secondary" onClick={reload}><RefreshCw className="h-4 w-4"/>Refresh</Button>}/>{(error||notice)&&<div className="mb-4"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<Card><div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><Input className="pl-9" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by nickname or UID"/></div><Select className="sm:w-32" value={size} onChange={e=>{setPage(1);setSize(+e.target.value)}}><option value="10">10 per page</option><option value="20">20 per page</option><option value="50">50 per page</option><option value="100">100 per page</option></Select></div><div className="overflow-x-auto scrollbar-thin"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3">Player</th><th>UID</th><th>Level</th><th>Gateway</th><th>Status</th><th className="px-5 text-right">Actions</th></tr></thead><tbody className="divide-y divide-border">{data?.users?.map(u=><tr key={u.uid} className="hover:bg-muted/30"><td className="px-5 py-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-muted font-bold">{(u.nickname||'P')[0]}</span><div><b>{u.nickname}</b><div className="text-xs text-muted-foreground">Role {u.role}</div></div></div></td><td>{u.uid}</td><td>{u.level}</td><td className="text-muted-foreground">{u.node}</td><td><Badge tone="good">Online</Badge></td><td className="px-5"><div className="flex justify-end gap-2"><Button className="h-8 px-3" variant="secondary" onClick={()=>setModal({...u,action:'kick'})}>Kick</Button><Button className="h-8 px-3" variant="danger" onClick={()=>setModal({...u,action:'ban'})}>Ban</Button></div></td></tr>)}</tbody></table>{loading&&<div className="p-5"><Skeleton className="h-40"/></div>}{!loading&&!data?.users?.length&&<Empty icon={Users} title="No matching players" description="Try another search or wait for a player to connect."/>}</div><div className="flex items-center justify-between border-t border-border px-5 py-4 text-sm text-muted-foreground"><span>{data?.pagination?.total||0} players</span><div className="flex items-center gap-2"><Button className="h-8 px-2" variant="secondary" disabled={page<=1} onClick={()=>setPage(p=>p-1)}><ChevronLeft className="h-4 w-4"/></Button><span>Page {data?.pagination?.page||1} of {data?.pagination?.pages||1}</span><Button className="h-8 px-2" variant="secondary" disabled={page>=(data?.pagination?.pages||1)} onClick={()=>setPage(p=>p+1)}><ChevronRight className="h-4 w-4"/></Button></div></div></Card><Modal open={!!modal} onOpenChange={v=>!v&&setModal(null)} title={`${modal?.action==='ban'?'Ban':'Remove'} ${modal?.nickname||'player'}?`} description={modal?.action==='ban'?'The account will be blocked and disconnected immediately.':'The player will be disconnected but can sign in again.'} footer={<><Button variant="secondary" onClick={()=>setModal(null)}>Cancel</Button><Button variant={modal?.action==='ban'?'danger':'default'} busy={busy} onClick={action}>Confirm {modal?.action}</Button></>}><Field label="Reason" hint="This is stored with the moderation action."><Textarea value={reason} onChange={e=>setReason(e.target.value)}/></Field></Modal></>}
-function Lobby(){const{data,setData,loading,error}=useRequest(()=>api('/content'),[]);const[form,setForm]=useState(null),[feedback,setFeedback]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');useEffect(()=>{if(data)setForm(structuredClone(data))},[data]);useEffect(()=>{api('/feedback').then(d=>setFeedback(d.settings)).catch(e=>setNotice(e.message))},[]);const set=(path,value)=>setForm(f=>{const n=structuredClone(f);let o=n;for(let i=0;i<path.length-1;i++)o=o[path[i]];o[path.at(-1)]=value;return n});async function save(){setBusy(true);try{const d=await api('/content',{method:'PUT',body:JSON.stringify({...form,marquee:Array.isArray(form.marquee)?form.marquee:[]})});setData(d.content);setNotice('Lobby changes published. Players receive them on their next refresh.')}catch(e){setNotice(e.message)}finally{setBusy(false)}}async function upload(file){if(!file)return;setBusy(true);try{const dataUrl=await new Promise((ok,no)=>{const r=new FileReader;r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(file)});const d=await api('/cloudinary-upload',{method:'POST',body:JSON.stringify({dataUrl})});set(['banner','imageUrl'],d.imageUrl);setNotice('Image uploaded. Save changes to publish it.')}catch(e){setNotice(e.message)}finally{setBusy(false)}}async function saveFeedback(){setBusy(true);try{const d=await api('/feedback',{method:'PUT',body:JSON.stringify(feedback)});setFeedback(d.settings);setNotice('Feedback settings saved.')}catch(e){setNotice(e.message)}finally{setBusy(false)}}if(loading||!form)return <Skeleton className="h-[600px]"/>;return <><Heading title="Lobby content" description="Update what players see without editing configuration files." action={<Button busy={busy} onClick={save}>Publish changes</Button>}/>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><Card><CardHeader title="Presentation" description="Region, language, and scrolling announcements."/><div className="grid gap-5 p-5 sm:grid-cols-2"><Field label="Default region" hint="Shown in the lobby and used by regional content."><Input value={form.region||''} onChange={e=>set(['region'],e.target.value)}/></Field><Field label="Language"><Input value={form.language||''} onChange={e=>set(['language'],e.target.value)}/></Field><Field className="sm:col-span-2" label="Marquee messages" hint="Enter one announcement per line. Empty lines are ignored."><Textarea className="min-h-36" value={(form.marquee||[]).join('\n')} onChange={e=>set(['marquee'],e.target.value.split('\n').filter(Boolean))}/></Field></div></Card><Card><CardHeader title="Banner preview" description="This is the image players will receive."/><div className="p-5">{form.banner?.imageUrl?<img className="aspect-video w-full rounded-lg border border-border object-cover" src={form.banner.imageUrl} alt="Banner preview"/>:<div className="grid aspect-video place-items-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">No image selected</div>}<label className="mt-4 block"><span className="sr-only">Upload image</span><input type="file" accept="image/png,image/jpeg,image/webp" className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-secondary file:px-4 file:py-2 file:font-semibold file:text-foreground" onChange={e=>upload(e.target.files[0])}/></label></div></Card><Card className="xl:col-span-2"><CardHeader title="Promotional banner" description="Give players a clear title, description, and destination."/><div className="grid gap-5 p-5 sm:grid-cols-2"><Field label="Internal name"><Input value={form.banner?.name||''} onChange={e=>set(['banner','name'],e.target.value)}/></Field><Field label="Headline"><Input value={form.banner?.title||''} onChange={e=>set(['banner','title'],e.target.value)}/></Field><Field className="sm:col-span-2" label="Description"><Textarea value={form.banner?.description||''} onChange={e=>set(['banner','description'],e.target.value)}/></Field><Field label="Image URL"><Input type="url" value={form.banner?.imageUrl||''} onChange={e=>set(['banner','imageUrl'],e.target.value)}/></Field><Field label="Open when tapped"><Input type="url" value={form.banner?.linkUrl||''} onChange={e=>set(['banner','linkUrl'],e.target.value)}/></Field></div></Card>{feedback&&<Card className="xl:col-span-2"><CardHeader title="Post-match feedback" description="Choose whether the game asks players for feedback after matches." action={<Switch checked={feedback.enabled} onCheckedChange={v=>setFeedback({...feedback,enabled:v})}/>}/><div className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-4"><Field label="Region"><Input value={feedback.region} onChange={e=>setFeedback({...feedback,region:e.target.value})}/></Field><Field label="Cooldown"><Input type="number" value={feedback.cooldown} onChange={e=>setFeedback({...feedback,cooldown:+e.target.value})}/></Field><Field label="Primary game mode"><Input type="number" value={feedback.primary.gameMode} onChange={e=>setFeedback({...feedback,primary:{...feedback.primary,gameMode:+e.target.value}})}/></Field><Field label="Rank threshold"><Input type="number" value={feedback.primary.rank} onChange={e=>setFeedback({...feedback,primary:{...feedback.primary,rank:+e.target.value}})}/></Field><div className="lg:col-span-4 flex justify-end"><Button variant="secondary" busy={busy} onClick={saveFeedback}>Save feedback settings</Button></div></div></Card>}</div></>}
-function Characters(){const{data,setData,loading,error}=useRequest(()=>api('/characters'),[]);const[search,setSearch]=useState(''),[saving,setSaving]=useState(''),[notice,setNotice]=useState('');const list=(data?.characters||[]).filter(x=>x.name.toLowerCase().includes(search.toLowerCase())||String(x.id).includes(search));async function toggle(c,v){setSaving(c.id);try{const d=await api(`/characters/${c.id}`,{method:'PUT',body:JSON.stringify({enabled:v})});setData(x=>({characters:x.characters.map(y=>y.id===c.id?{...y,...d.character}:y)}));setNotice(`${c.name} is now ${v?'available':'locked'}.`)}catch(e){setNotice(e.message)}finally{setSaving('')}}return <><Heading title="Characters" description="Lock or unlock characters for every player."/><div className="mb-5 max-w-md"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><Input className="pl-9" placeholder="Search characters" value={search} onChange={e=>setSearch(e.target.value)}/></div></div>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}{loading?<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[1,2,3,4,5,6,7,8].map(x=><Skeleton className="h-28" key={x}/>)}</div>:<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{list.map(c=><Card key={c.id} className="flex items-center gap-4 p-4"><div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted"><img src={c.imageUrl} onError={e=>e.currentTarget.style.display='none'} className="h-full w-full object-cover"/></div><div className="min-w-0 flex-1"><div className="truncate font-semibold">{c.name}</div><div className="mt-1 flex items-center gap-2"><span className="text-xs text-muted-foreground">{c.id}</span>{c.variant==='awakened'&&<Badge>Awakened</Badge>}</div></div><Switch disabled={saving===c.id} checked={c.enabled} onCheckedChange={v=>toggle(c,v)}/></Card>)}</div>}</>}
-function Bots(){const{data,setData,loading,error}=useRequest(()=>api('/bots'),[]);const[form,setForm]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');useEffect(()=>{if(data)setForm(data.settings)},[data]);async function save(){setBusy(true);try{const d=await api('/bots',{method:'PUT',body:JSON.stringify(form)});setData(x=>({...x,settings:d.settings}));setNotice('Bot behavior saved for new matches.')}catch(e){setNotice(e.message)}finally{setBusy(false)}}if(loading||!form)return <Skeleton className="h-96"/>;return <><Heading title="Bot configuration" description="Tune practice opponents without touching server files." action={<Button busy={busy} onClick={save}>Save bot settings</Button>}/>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<div className="grid gap-5 lg:grid-cols-2"><Card><CardHeader title="Match setup" description="Controls the number and overall challenge."/><div className="grid gap-5 p-5"><Field label="Opponent bots" hint="From one to four opponents per match."><Select value={form.opponents} onChange={e=>setForm({...form,opponents:+e.target.value})}>{[1,2,3,4].map(x=><option key={x} value={x}>{x} opponent{x>1?'s':''}</option>)}</Select></Field><Field label="Difficulty" hint="Affects reaction time, accuracy, and decision speed."><Select value={form.difficulty} onChange={e=>setForm({...form,difficulty:e.target.value})}><option value="easy">Easy — relaxed practice</option><option value="normal">Normal — balanced</option><option value="hard">Hard — competitive</option></Select></Field>{data.geometry?.available?<Notice message={`${data.geometry.map}: ${data.geometry.colliders} navigation colliders loaded.`}/>:<Notice tone="bad" message="Navigation geometry is unavailable. Bots may move less accurately."/>}</div></Card><Card><CardHeader title="Bot abilities" description="Enable behaviors individually for easier testing."/><div className="divide-y divide-border">{[['purchasing','Buy weapons','Bots select and purchase weapons between rounds.'],['cover','Take cover','Bots seek nearby protection when under fire.'],['reviving','Revive teammates','Bots help knocked team members.'],['gloo','Use gloo walls','Bots deploy defensive gloo walls.']].map(([key,label,hint])=><div key={key} className="flex items-center justify-between gap-4 p-5"><div><div className="font-semibold">{label}</div><div className="mt-1 text-sm text-muted-foreground">{hint}</div></div><Switch checked={form[key]} onCheckedChange={v=>setForm({...form,[key]:v})}/></div>)}</div></Card></div></>}
-function Features(){const{data,setData,loading,error}=useRequest(()=>api('/feature-switches'),[]);const[notice,setNotice]=useState('');async function toggle(item,v){try{const d=await api(`/feature-switches/${item.key}`,{method:'PUT',body:JSON.stringify({enabled:v})});setData(x=>({switches:x.switches.map(y=>y.key===item.key?d.switch:y)}));setNotice(`${item.label} ${v?'enabled':'disabled'}.`)}catch(e){setNotice(e.message)}}return <><Heading title="Feature switches" description="Control client menus only when their server support is ready."/>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<Card><div className="divide-y divide-border">{loading?<div className="p-5"><Skeleton className="h-80"/></div>:data?.switches.map(x=><div key={x.key} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="max-w-3xl"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{x.label}</span><Badge tone={x.state==='working'?'good':'warn'}>{x.state==='working'?'Ready':'Planned'}</Badge><span className="text-xs text-muted-foreground">Switch {x.id}</span></div><p className="mt-1 text-sm text-muted-foreground">{x.description}</p></div><Switch checked={x.enabled} disabled={x.state!=='working'} onCheckedChange={v=>toggle(x,v)}/></div>)}</div></Card></>}
-function GameModes(){const{data,setData,loading,error}=useRequest(()=>api('/game-modes'),[]);const[notice,setNotice]=useState('');async function toggle(mode,enabled){try{const d=await api(`/game-modes/${mode.key}`,{method:'PUT',body:JSON.stringify({enabled})});setData(x=>({modes:x.modes.map(y=>y.key===mode.key?d.mode:y)}));setNotice(`${mode.label} ${enabled?'enabled':'disabled'}. New matchmaking requests use this setting immediately.`)}catch(e){setNotice(e.message)}}return <><Heading title="Game modes" description="Publish or hide Classic, Ranked, Clash Squad, and Training modes from the client."/><p className="mb-5 text-sm text-muted-foreground">Disabled modes are removed from the mode list and rejected by matchmaking and squad start. Existing matches are allowed to finish.</p>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{loading?[1,2,3,4,5,6].map(x=><Skeleton className="h-40" key={x}/>):data?.modes.map(x=><Card key={x.key} className="p-5"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{x.label}</div><div className="mt-1 text-xs text-muted-foreground">Map {x.map_id} · Game mode {x.game_mode} · Match mode {x.match_mode}</div></div><Switch checked={x.enabled} onCheckedChange={v=>toggle(x,v)}/></div><div className="mt-5 flex items-center justify-between"><Badge tone={x.enabled?'good':'neutral'}>{x.enabled?'Available':'Disabled'}</Badge><Badge tone={x.state==='working'?'good':'warn'}>{x.state==='working'?'Ready':'Preview'}</Badge></div></Card>)}</div></>}
-function JsonSettings({title,description,endpoint,field}){const{data,loading,error}=useRequest(()=>api(endpoint),[]);const[text,setText]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');useEffect(()=>{if(data)setText(JSON.stringify(data[field],null,2))},[data,field]);async function save(){setBusy(true);try{const value=JSON.parse(text);await api(endpoint,{method:'PUT',body:JSON.stringify(value)});setNotice('Configuration validated and saved.')}catch(e){setNotice(e instanceof SyntaxError?'The JSON format is invalid. Check commas and brackets.':e.message)}finally{setBusy(false)}}return <><Heading title={title} description={description} action={<Button busy={busy} onClick={save}>Validate and save</Button>}/><div className="mb-5"><Notice tone="bad" message="Advanced settings: invalid IDs can hide content from the client. Keep a copy before making large changes."/>{(error||notice)&&<div className="mt-3"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}</div><Card><CardHeader title="Configuration data" description="Changes are checked by the server before they are accepted."/><div className="p-5">{loading?<Skeleton className="h-96"/>:<Textarea spellCheck="false" className="min-h-[560px] font-mono text-xs leading-5" value={text} onChange={e=>setText(e.target.value)}/>}</div></Card></>}
-function ClientConfig(){const{data,setData,loading,error,reload}=useRequest(()=>api('/login-desc'),[]);const[open,setOpen]=useState(null),[text,setText]=useState(''),[enabled,setEnabled]=useState(true),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');function edit(x){setOpen(x);setText(JSON.stringify(x.data,null,2));setEnabled(x.enabled)}async function save(){setBusy(true);try{const d=await api(`/login-desc/${open.key}`,{method:'PUT',body:JSON.stringify({enabled,data:JSON.parse(text)})});setData(x=>({sections:x.sections.map(s=>s.key===open.key?{...s,...d.section}:s)}));setOpen(null);setNotice(`${open.label||open.key} saved.`)}catch(e){setNotice(e instanceof SyntaxError?'The JSON format is invalid.':e.message)}finally{setBusy(false)}}return <><Heading title="Client configuration" description="Manage the sections sent to the game during login." action={<Button variant="secondary" onClick={reload}><RefreshCw className="h-4 w-4"/>Reload</Button>}/>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{loading?[1,2,3,4,5,6].map(x=><Skeleton className="h-28" key={x}/>):data?.sections.map(x=><Card key={x.key} className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate font-semibold">{x.label||x.key}</div><div className="mt-1 truncate text-xs text-muted-foreground">{x.key}</div></div><Badge tone={x.enabled?'good':'neutral'}>{x.enabled?'Enabled':'Disabled'}</Badge></div><Button variant="secondary" className="mt-4 h-8 w-full" onClick={()=>edit(x)}>Review settings</Button></Card>)}</div><Modal open={!!open} onOpenChange={v=>!v&&setOpen(null)} title={open?.label||open?.key} description="Edit this login configuration section." footer={<><Button variant="secondary" onClick={()=>setOpen(null)}>Cancel</Button><Button busy={busy} onClick={save}>Save section</Button></>}><div className="mb-4 flex items-center justify-between rounded-lg border border-border p-3"><div><div className="text-sm font-semibold">Send to clients</div><div className="text-xs text-muted-foreground">Disabled sections use the game's default behavior.</div></div><Switch checked={enabled} onCheckedChange={setEnabled}/></div><Field label="Section data"><Textarea className="min-h-72 font-mono text-xs" value={text} onChange={e=>setText(e.target.value)}/></Field></Modal></>}
-function Voice(){const{data,setData,loading,error}=useRequest(()=>api('/voice'),[]);const[form,setForm]=useState(null),[secret,setSecret]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');useEffect(()=>{if(data)setForm(data.settings)},[data]);async function save(){setBusy(true);try{const d=await api('/voice',{method:'PUT',body:JSON.stringify({...form,sharedSecret:secret})});setData({settings:d.settings});setNotice('Voice provider settings saved.')}catch(e){setNotice(e.message)}finally{setBusy(false)}}async function test(){setBusy(true);try{await api('/voice/test',{method:'POST',body:JSON.stringify({channel:'dashboard-test'})});setNotice('Connection successful. The provider returned a token.')}catch(e){setNotice(e.message)}finally{setBusy(false)}}if(loading||!form)return <Skeleton className="h-96"/>;return <><Heading title="Voice chat" description="Connect the game to an external voice-token provider."/>{(error||notice)&&<div className="mb-5"><Notice tone={error?'bad':'good'} message={error||notice}/></div>}<Card className="max-w-3xl"><CardHeader title="Provider connection" description="The shared secret is stored securely and is never returned to the browser." action={<Badge tone={form.configured?'good':'warn'}>{form.configured?'Configured':'Not configured'}</Badge>}/><div className="grid gap-5 p-5"><Field label="Token service URL" hint="The server calls this HTTPS endpoint to create voice tokens."><Input type="url" placeholder="https://voice.example.com/token" value={form.tokenUrl} onChange={e=>setForm({...form,tokenUrl:e.target.value})}/></Field><Field label="Shared secret" hint={form.hasSecret?'A secret is already stored. Leave blank to keep it.':'Enter the bearer token expected by the provider.'}><Input type="password" value={secret} onChange={e=>setSecret(e.target.value)} placeholder={form.hasSecret?'••••••••••••':'Enter secret'}/></Field><Field label="Request timeout" hint="500–10,000 milliseconds"><Input type="number" min="500" max="10000" value={form.timeoutMs} onChange={e=>setForm({...form,timeoutMs:+e.target.value})}/></Field><div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" busy={busy} onClick={test}>Test connection</Button><Button busy={busy} onClick={save}>Save provider</Button></div></div></Card></>}
-export default function App(){const[session,setSession]=useState({loading:true,authenticated:false,configured:true,user:''});const nav=useNavigate();useEffect(()=>{api('/auth/session').then(d=>setSession({loading:false,...d})).catch(e=>setSession({loading:false,authenticated:false,configured:e.status!==503,user:''}))},[]);async function logout(){try{await api('/auth/logout',{method:'POST'})}finally{setSession(s=>({...s,authenticated:false,user:''}));nav('/')}}if(session.loading)return <div className="grid min-h-screen place-items-center"><div className="flex items-center gap-3 text-muted-foreground"><RefreshCw className="h-5 w-5 animate-spin"/>Loading dashboard…</div></div>;return session.authenticated?<Shell user={session.user} onLogout={logout}/>:<Login configured={session.configured} onLogin={user=>setSession({loading:false,authenticated:true,configured:true,user})}/>}
+const navGroups = [
+  {
+    label: 'Operations',
+    items: [
+      { to: '/', label: 'Overview', icon: LayoutDashboard },
+      { to: '/players', label: 'Players', icon: Users },
+      { to: '/rewards', label: 'Player rewards', icon: Gift },
+    ],
+  },
+  {
+    label: 'Content',
+    items: [
+      { to: '/lobby', label: 'Lobby content', icon: ImageIcon },
+      { to: '/ads', label: 'Advertisements', icon: Sparkles },
+    ],
+  },
+  {
+    label: 'Gameplay',
+    items: [
+      { to: '/game-modes', label: 'Game modes', icon: MapIcon },
+      { to: '/characters', label: 'Characters', icon: UserRound },
+      { to: '/bots', label: 'Bots', icon: Bot },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { to: '/features', label: 'Feature switches', icon: ToggleLeft },
+      { to: '/luck-royale', label: 'Luck Royale', icon: Gem },
+      { to: '/client-config', label: 'Client configuration', icon: Settings2 },
+      { to: '/voice', label: 'Voice chat', icon: Mic2 },
+    ],
+  },
+];
+
+const routes = navGroups.flatMap((group) => group.items);
+const titleMap = Object.fromEntries(routes.map((item) => [item.to, item.label]));
+
+function Brand({ compact = false }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="relative grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-ember">
+        <Flame className="h-5 w-5" />
+      </span>
+      <span className={cn('leading-tight', compact && 'sr-only')}>
+        <span className="block font-display text-[15px] font-semibold tracking-[-0.02em]">Shade Control</span>
+        <span className="block font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
+          Operations console
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function Login({ onLogin, configured }) {
+  const [user, setUser] = useState('admin');
+  const [password, setPassword] = useState('');
+  const [reveal, setReveal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const data = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: user, password }),
+      });
+      onLogin(data.user);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="grid min-h-dvh lg:grid-cols-[1.05fr_.95fr]">
+      <section className="panel-grid relative hidden overflow-hidden border-r border-border px-12 py-12 lg:flex lg:flex-col lg:justify-between">
+        <div className="relative z-10">
+          <Brand />
+        </div>
+        <div className="relative z-10 max-w-lg">
+          <div className="eyebrow mb-4">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            Administrator access
+          </div>
+          <h1 className="font-display text-[clamp(2.4rem,4vw,3.6rem)] font-semibold leading-[0.98] tracking-[-0.045em]">
+            Command the fire.
+          </h1>
+          <p className="mt-4 max-w-md text-[14px] leading-6 text-muted-foreground">
+            One console for live players, matchmaking, lobby content, and gameplay configuration.
+            Every change is validated by the server before it reaches a client.
+          </p>
+          <div className="mt-10 grid gap-3">
+            {[
+              { icon: Activity, title: 'Live telemetry', copy: 'Players, matches, and node health refresh automatically.' },
+              { icon: ShieldCheck, title: 'Safe moderation', copy: 'Kick or ban with an audit reason attached to the action.' },
+              { icon: Sparkles, title: 'Instant publishing', copy: 'Rewards, banners, and modes deploy without a restart.' },
+            ].map(({ icon: Icon, title, copy }) => (
+              <div key={title} className="flex items-start gap-3 rounded-xl border border-border/80 bg-card/50 p-3.5 backdrop-blur-sm">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div>
+                  <div className="text-[13px] font-semibold">{title}</div>
+                  <div className="mt-0.5 text-[12px] leading-5 text-muted-foreground">{copy}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="relative z-10 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          <StatusDot tone="good" pulse />
+          Private server control plane
+        </div>
+        <div className="pointer-events-none absolute -right-32 top-1/3 h-[28rem] w-[28rem] rounded-full border border-primary/10 bg-primary/[0.04] blur-2xl" />
+      </section>
+
+      <section className="flex min-h-dvh items-center justify-center px-5 py-10">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 lg:hidden">
+            <Brand />
+          </div>
+          <div className="mb-7">
+            <div className="eyebrow mb-2.5">Secure sign in</div>
+            <h2 className="font-display text-[2rem] font-semibold leading-none tracking-[-0.04em]">Welcome back</h2>
+            <p className="mt-2.5 text-[13.5px] leading-6 text-muted-foreground">
+              Authenticate to manage players, gameplay, and lobby content.
+            </p>
+          </div>
+
+          {!configured && (
+            <Notice
+              tone="bad"
+              className="mb-5"
+              message="Admin login is not configured. Add ADMIN_PASSWORD to the server .env file and restart it."
+            />
+          )}
+
+          <form className="grid gap-4" onSubmit={submit}>
+            <Field label="Username" htmlFor="login-user">
+              <Input
+                id="login-user"
+                autoComplete="username"
+                value={user}
+                onChange={(event) => setUser(event.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Password" htmlFor="login-password">
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={reveal ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  autoFocus
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  aria-label={reveal ? 'Hide password' : 'Show password'}
+                  aria-pressed={reveal}
+                  onClick={() => setReveal((value) => !value)}
+                  className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  {reveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </Field>
+            {error && <Notice tone="bad" message={error} />}
+            <Button type="submit" size="lg" busy={busy} className="mt-2 w-full">
+              Sign in
+            </Button>
+          </form>
+
+          <p className="mt-6 text-center text-[11.5px] leading-5 text-muted-foreground">
+            Protected administration area. Sessions expire after 12 hours.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function SidebarContent({ onNavigate, online }) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-14 items-center px-2">
+        <Brand />
+      </div>
+      <nav className="mt-3 flex-1 space-y-4 overflow-y-auto pb-4 scrollbar-thin" aria-label="Primary">
+        {navGroups.map((group) => (
+          <div key={group.label}>
+            <div className="px-3 pb-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">
+              {group.label}
+            </div>
+            <div className="grid gap-0.5">
+              {group.items.map(({ to, label, icon: Icon }) => (
+                <NavLink key={to} to={to} end={to === '/'} onClick={onNavigate} className="nav-item">
+                  <Icon />
+                  <span className="truncate">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+      <div className="mt-2 rounded-xl border border-border bg-background/40 p-3">
+        <div className="flex items-center gap-2">
+          <StatusDot tone="good" pulse />
+          <span className="text-[12px] font-semibold">Live control plane</span>
+        </div>
+        <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <span>{online != null ? `${online} online` : 'Connecting'}</span>
+          <span>v1.0</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileNav({ open, onOpenChange, online }) {
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[3px] data-[state=open]:animate-fade-in lg:hidden" />
+        <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 w-[86%] max-w-[300px] border-r border-border bg-card p-3 shadow-lift outline-none data-[state=open]:animate-slide-in-left lg:hidden">
+          <DialogPrimitive.Title className="sr-only">Navigation</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="sr-only">Admin console sections</DialogPrimitive.Description>
+          <DialogPrimitive.Close asChild>
+            <Button aria-label="Close navigation" variant="ghost" size="iconSm" className="absolute right-3 top-3">
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogPrimitive.Close>
+          <SidebarContent onNavigate={() => onOpenChange(false)} online={online} />
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
+
+function Shell({ user, onLogout }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [term, setTerm] = useState('');
+  const [online, setOnline] = useState(null);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    async function tick() {
+      try {
+        const data = await api('/status?page=1&pageSize=10');
+        if (active) setOnline(Number(data?.stats?.online) || 0);
+      } catch {
+        /* header telemetry is best-effort */
+      }
+    }
+    tick();
+    const timer = setInterval(tick, 30000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.key !== '/') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  function submitSearch(event) {
+    event.preventDefault();
+    const value = term.trim();
+    navigate(value ? `/players?q=${encodeURIComponent(value)}` : '/players');
+  }
+
+  const title = titleMap[location.pathname] || 'Administration';
+
+  return (
+    <div className="min-h-dvh">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] border-r border-border bg-card/60 px-3 py-3 backdrop-blur-xl lg:block">
+        <SidebarContent online={online} />
+      </aside>
+
+      <MobileNav open={mobileOpen} onOpenChange={setMobileOpen} online={online} />
+
+      <div className="lg:pl-[264px]">
+        <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
+          <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+            <Button
+              variant="ghost"
+              size="iconSm"
+              className="lg:hidden"
+              aria-label="Open navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground/70">
+                Console
+                <span aria-hidden="true">/</span>
+                <span className="text-primary/90">Shade</span>
+              </div>
+              <h1 className="truncate font-display text-[15px] font-semibold leading-tight tracking-tight">{title}</h1>
+            </div>
+
+            <form onSubmit={submitSearch} className="relative ml-auto hidden w-full max-w-xs md:block lg:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchRef}
+                value={term}
+                onChange={(event) => setTerm(event.target.value)}
+                placeholder="Search players…"
+                className="h-9 pl-9 pr-12 text-[13px]"
+                aria-label="Search players"
+              />
+              <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                /
+              </kbd>
+            </form>
+
+            <div className="ml-auto flex items-center gap-2 md:ml-0">
+              <span className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 sm:inline-flex">
+                <StatusDot tone="good" pulse />
+                <span className="text-[11.5px] font-semibold">Live</span>
+                {online != null && (
+                  <span className="font-mono text-[10.5px] text-muted-foreground">{online} online</span>
+                )}
+              </span>
+              <div className="hidden items-center gap-2.5 border-l border-border pl-3 sm:flex">
+                <span className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-secondary font-mono text-[11px] font-semibold">
+                  {initials(user, 'A')}
+                </span>
+                <span className="hidden leading-tight xl:block">
+                  <span className="block max-w-32 truncate text-[12.5px] font-semibold">{user}</span>
+                  <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+                    Administrator
+                  </span>
+                </span>
+              </div>
+              <Button variant="secondary" size="iconSm" aria-label="Sign out" title="Sign out" onClick={onLogout}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-[1500px] px-4 py-6 pb-16 sm:px-6 lg:px-8 lg:py-8">
+          <div key={location.pathname} className="page-enter">
+            <Routes>
+              <Route path="/" element={<Overview />} />
+              <Route path="/players" element={<Players />} />
+              <Route path="/rewards" element={<Rewards />} />
+              <Route path="/lobby" element={<Lobby />} />
+              <Route path="/ads" element={<Ads />} />
+              <Route path="/game-modes" element={<GameModes />} />
+              <Route path="/characters" element={<Characters />} />
+              <Route path="/bots" element={<Bots />} />
+              <Route path="/features" element={<Features />} />
+              <Route
+                path="/luck-royale"
+                element={
+                  <JsonSettings
+                    title="Luck Royale"
+                    description="Configure draws, prize pools, pricing, and availability for the Luck Royale rotation."
+                    endpoint="/luck-royale"
+                    field="settings"
+                  />
+                }
+              />
+              <Route path="/client-config" element={<ClientConfig />} />
+              <Route path="/voice" element={<Voice />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [session, setSession] = useState({ loading: true, authenticated: false, configured: true, user: '' });
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    api('/auth/session')
+      .then((data) => setSession({ loading: false, ...data }))
+      .catch((error) =>
+        setSession({
+          loading: false,
+          authenticated: false,
+          configured: error.data?.configured ?? error.status !== 503,
+          user: '',
+        }),
+      );
+  }, []);
+
+  async function logout() {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch (error) {
+      toast(error.message, { tone: 'bad' });
+    } finally {
+      setSession((current) => ({ ...current, authenticated: false, user: '' }));
+      navigate('/');
+    }
+  }
+
+  if (session.loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <div className="flex flex-col items-center gap-4">
+          <span className="grid h-12 w-12 place-items-center rounded-xl bg-primary text-primary-foreground shadow-ember">
+            <Flame className="h-6 w-6" />
+          </span>
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            Establishing secure session
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session.authenticated) {
+    return (
+      <Login
+        configured={session.configured}
+        onLogin={(user) => setSession({ loading: false, authenticated: true, configured: true, user })}
+      />
+    );
+  }
+
+  return <Shell user={session.user || 'admin'} onLogout={logout} />;
+}

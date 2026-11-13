@@ -16,6 +16,11 @@ const trainingCatalogID uint32 = 1001
 var trainingSpawn = message.Vec3{X: 63.25, Y: 11.513, Z: 16.43}
 var trainingFacing = message.Vec3{X: 0.617, Z: -0.787}
 
+// Alpha Island's vehicle loop is centred around these level41 reset markers.
+// They are also safe, grounded destinations for the inventory-shop portal.
+var trainingPortalSpawn = message.Vec3{X: 47.84, Y: 8.66, Z: -22.2}
+var trainingPortalFacing = message.Vec3{X: 0, Z: 1}
+
 var trainingCatalog = []message.TrainingCatalogEntry{
 	{2, 1, 101, true}, {6, 2, 101, true}, {12, 3, 101, true}, {24, 4, 101, true},
 	{33, 5, 101, true}, {11, 6, 101, true}, {14, 7, 101, true}, {28, 8, 101, true},
@@ -66,6 +71,62 @@ func (m *Match) sendTrainingWorldInit(s *session) {
 		message.ForceTeleport(s.entityID, m.tpSeq, trainingSpawn, trainingFacing, 0),
 		fmt.Sprintf("cmd=145 Training teleport ent=%#x token=%d pos=(%.2f,%.2f,%.2f)", s.entityID, m.tpSeq, trainingSpawn.X, trainingSpawn.Y, trainingSpawn.Z))
 	s.sendDataLog(packet.CmdTrainingWorldReady, nil, "cmd=253 TrainingWorldReady")
+	m.sendTrainingGroundState(s)
+}
+
+// sendTrainingGroundState publishes the static training pickups once and replays
+// them to a reconnecting client. The client uses the normal world-loot path for
+// these objects, so cmd 111 pickup works identically to dropped loot.
+func (m *Match) sendTrainingGroundState(s *session) {
+	if m.containers == nil {
+		m.containers = make(map[uint16]*container)
+	}
+	if !m.trainingSeeded {
+		m.trainingSeeded = true
+		id := uint16(41000)
+		for i, entry := range trainingCatalog {
+			item, ok := trainingItem(entry.ItemID)
+			if !ok {
+				continue
+			}
+			// Spread the catalogue along the marked vehicle loop so the client
+			// sees a usable training rack rather than a single overlapping pile.
+			pos := message.Vec3{X: 48 + float64(i%8)*8, Y: 8.66, Z: -22 + float64(i/8)*8}
+			unique := uint32(0x71000000) | uint32(i+1)
+			m.containers[id] = &container{id: id, pos: pos, ctype: message.ContainerNormal, items: []lootItem{{unique: unique, data: item.ItemID, count: 1}}}
+			id++
+		}
+		// Utility rack: ammo, healing, armour, and gloo are ordinary ground
+		// inventory objects, so the existing pickup/equip path handles them.
+		utilities := []struct {
+			data uint32
+			pos  message.Vec3
+		}{
+			{201, message.Vec3{X: 48, Y: 8.66, Z: 18}},
+			{203, message.Vec3{X: 56, Y: 8.66, Z: 18}},
+			{102, message.Vec3{X: 64, Y: 8.66, Z: 18}},
+			{302, message.Vec3{X: 72, Y: 8.66, Z: 18}},
+			{305, message.Vec3{X: 80, Y: 8.66, Z: 18}},
+			{1201, message.Vec3{X: 88, Y: 8.66, Z: 18}},
+		}
+		for _, utility := range utilities {
+			m.containers[id] = &container{id: id, pos: utility.pos, ctype: message.ContainerNormal, items: []lootItem{{unique: 0x71010000 | uint32(id), data: utility.data, count: 1}}}
+			id++
+		}
+	}
+	for _, box := range m.containers {
+		if box == nil || len(box.items) == 0 || box.ctype != message.ContainerNormal {
+			continue
+		}
+		for _, item := range box.items {
+			// Alpha Island's 1.70 client does not materialise the list-form
+			// pickup packet (cmd 225) for this scene. The same client does
+			// render and interact with the single-item world packet used by
+			// Bermuda, so emit cmd 114 per object.
+			s.sendDataLog(packet.CmdAddPickup, message.AddPickup(item.pickupItem(box.id), box.pos, box.ctype),
+				fmt.Sprintf("cmd=114 Training pickup box=%d data=%d", box.id, item.data))
+		}
+	}
 }
 
 func (s *session) handleTrainingCatalogReq(p *packet.Packet) {
@@ -151,10 +212,15 @@ func (s *session) handleTrainingTrigger(p *packet.Packet) {
 		return
 	}
 	if p.Cmd == packet.CmdTrainingIntoPortal {
-		// The destination is selected from LevelPortal.SpawnPoints in the level
-		// asset. Do not substitute a coordinate from another captured map.
-		log.Printf("[mm-udp] cmd=330 Training portal ent=%#x id=%d active=%t awaiting scene spawn-point mapping",
-			entityID, triggerID, active)
+		if active {
+			s.match.tpSeq++
+			s.player.SpawnPos, s.player.SpawnFace = trainingPortalSpawn, trainingPortalFacing
+			s.playerPos = trainingPortalSpawn
+			s.sendDataLog(packet.CmdTeleport,
+				message.ForceTeleport(s.entityID, s.match.tpSeq, trainingPortalSpawn, trainingPortalFacing, 0),
+				fmt.Sprintf("cmd=145 Training portal ent=%#x id=%d pos=(%.2f,%.2f,%.2f)", entityID, triggerID, trainingPortalSpawn.X, trainingPortalSpawn.Y, trainingPortalSpawn.Z))
+			s.sendDataLog(packet.CmdTrainingWorldReady, nil, "cmd=253 TrainingWorldReady portal")
+		}
 	}
 }
 
@@ -203,6 +269,21 @@ func (s *session) handleTrainingRespawn(p *packet.Packet) {
 	s.match.hp[s.entityID] = s.match.settings.maxHP
 	s.match.life[s.entityID] = lifeAlive
 	s.match.sendTrainingWorldInit(s)
+}
+
+func (s *session) handleTrainingStatus(p *packet.Packet) {
+	if s.match == nil || !s.match.training || len(p.Payload) < 4 || binary.LittleEndian.Uint32(p.Payload[:4]) != s.entityID {
+		return
+	}
+	// A status acknowledgement keeps the client-side interaction state alive.
+	s.sendDataLog(packet.CmdTrainingStatus, append([]byte(nil), p.Payload[:minInt(len(p.Payload), 8)]...), "cmd=319 Training status")
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *session) handleTrainingInit(p *packet.Packet) {

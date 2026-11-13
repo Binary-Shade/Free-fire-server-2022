@@ -8,9 +8,11 @@
 'use strict';
 const loginDesc = require('./_loginDescData');
 const loginDescSettings = require('../../config/login-desc-settings');
+const adverts = require('../../config/advert-settings');
 
-function handler() {
-  return loginDescSettings.apply(loginDesc).advert_res || { advert_items: [] };
+function handler(reqObj) {
+  const configured = loginDescSettings.apply(loginDesc);
+  return adverts.protocolValue(configured.advert_res, reqObj && reqObj.language);
 }
 
 module.exports = {

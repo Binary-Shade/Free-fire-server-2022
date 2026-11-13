@@ -125,13 +125,19 @@ func (s *session) giveLoadout(resetCoins bool) {
 	for uid := range s.clientUIDs {
 		stale = append(stale, uid)
 	}
-	// Snapshot + clear any ground-loot boxes so a respawn/round-reset wipes stale containers
-	// (the round world resets); each id gets a cmd 228 DelContainer below.
+	// Snapshot + clear dynamic ground-loot boxes so a respawn/round-reset wipes stale
+	// containers. Training Grounds has persistent static racks; those must survive the
+	// starter-loadout reset and are replayed after the inventory packet.
 	var staleBoxes []uint16
-	for id := range s.match.containers {
+	keptBoxes := make(map[uint16]*container)
+	for id, box := range s.match.containers {
+		if s.match.training && box != nil && box.ctype == message.ContainerNormal {
+			keptBoxes[id] = box
+			continue
+		}
 		staleBoxes = append(staleBoxes, id)
 	}
-	s.match.containers = map[uint16]*container{}
+	s.match.containers = keptBoxes
 	uspUID := s.nextUID()
 	medkitID := s.nextUID()
 	uspMag := loadedMagFor(uspData, SkinForWeapon(uspData, s.player.Slots)) // loaded magazine (incl. auto-magazine boost)

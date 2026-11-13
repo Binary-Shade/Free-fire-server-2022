@@ -11,11 +11,13 @@
 const { requireAccount } = require('./_shared');
 const loginDesc = require('./_loginDescData');
 const loginDescSettings = require('../../config/login-desc-settings');
+const adverts = require('../../config/advert-settings');
 
 function handleGetAds(reqObj, ctx) {
-  if (!requireAccount(ctx)) return {};
+  const account = requireAccount(ctx);
+  if (!account) return {};
   const configured = loginDescSettings.apply(loginDesc);
-  return configured.advert_res || { advert_items: [] };
+  return adverts.protocolValue(configured.advert_res, account.language);
 }
 
 module.exports = {

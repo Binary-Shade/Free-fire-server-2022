@@ -57,7 +57,7 @@ func TestTrainingShopTriggerPushesShopOnlyOnStateChange(t *testing.T) {
 }
 
 func TestTrainingWorldInitTeleportsToCapturedSpawn(t *testing.T) {
-	s := &session{entityID: 0x0d00000d, out: &Writer{ch: make(chan outItem, 4)}}
+	s := &session{entityID: 0x0d00000d, out: &Writer{ch: make(chan outItem, 64)}}
 	m := &Match{training: true}
 	s.match = m
 	m.sendTrainingWorldInit(s)
